@@ -212,8 +212,6 @@ class ClientState(object):
                 #return 'pane-%i' % pane.pane_id
 
 
-
-
 class Pymux(object):
     """
     The main Pymux application class.
@@ -309,6 +307,7 @@ class Pymux(object):
         for c in self._client_states.values():
             if c.app == app:
                 return c
+
         raise ValueError
 
     def startup(self):
@@ -640,123 +639,3 @@ class Pymux(object):
 #        app._is_running = False
 
         client_state.app.run()
-
-
-#class _BufferMapping(BufferMapping):
-#    """
-#    Container for all the Buffer objects in a CommandLineInterface.
-#    """
-#    def __init__(self, pymux):
-#        self.pymux = pymux
-#
-#        def _handle_command(app, buffer):
-#            " When text is accepted in the command line. "
-#            text = buffer.text
-#
-#            # First leave command mode. We want to make sure that the working
-#            # pane is focussed again before executing the command handers.
-#            pymux.leave_command_mode(append_to_history=True)
-#
-#            # Execute command.
-#            pymux.handle_command(app, text)
-#
-#        def _handle_prompt_command(app, buffer):
-#            " When a command-prompt command is accepted. "
-#            text = buffer.text
-#            client_state = pymux.get_client_state()
-#            prompt_command = client_state.prompt_command
-#
-#            # Leave command mode and handle command.
-#            pymux.leave_command_mode(append_to_history=True)
-#            pymux.handle_command(app, prompt_command.replace('%%', text))
-#
-#        super(_BufferMapping, self).__init__({
-#            COMMAND: Buffer(
-#                complete_while_typing=True,
-#                completer=create_command_completer(pymux),
-#                accept_handler=_handle_command,
-#                auto_suggest=AutoSuggestFromHistory(),
-#            ),
-#            PROMPT: Buffer(
-#                accept_handler=_handle_prompt_command,
-#                auto_suggest=AutoSuggestFromHistory(),
-#            ),
-#        })
-#
-#    def __getitem__(self, name):
-#        " Override __getitem__ to make lookup of pane- buffers dynamic. "
-#        if name.startswith('pane-'):
-#            try:
-#                id = int(name[len('pane-'):])
-#                return self.pymux.panes_by_id[id].scroll_buffer
-#            except (ValueError, KeyError):
-#                raise KeyError
-#
-#        elif name.startswith('search-'):
-#            try:
-#                id = int(name[len('search-'):])
-#                return self.pymux.panes_by_id[id].search_buffer
-#            except (ValueError, KeyError):
-#                raise KeyError
-#        else:
-#            return super(_BufferMapping, self).__getitem__(name)
-#
-#    def current(self, app):
-#        """
-#        Return the currently focussed Buffer.
-#        """
-#        return self[self.current_name(app)]
-#
-#    def current_name(self, app):
-#        """
-#        Name of the current buffer.
-#        """
-#        client_state = self.pymux.get_client_state()
-#
-#        # Confirm.
-#        if client_state.confirm_text:
-#            return DUMMY_BUFFER
-#
-#        # Custom prompt.
-#        if client_state.prompt_command:
-#            return PROMPT
-#
-#        # Command mode.
-#        if client_state.command_mode:
-#            return COMMAND
-#
-#        # Copy/search mode.
-#        pane = self.pymux.arrangement.get_active_pane(app)
-#
-#        if pane and pane.display_scroll_buffer:
-#            if pane.is_searching:
-#                return 'search-%i' % pane.pane_id
-#            else:
-#                return 'pane-%i' % pane.pane_id
-#
-#        return DUMMY_BUFFER
-#
-#    def focus(self, app, buffer_name):
-#        """
-#        Focus buffer with the given name.
-#
-#        Called when a :class:`BufferControl` in the layout has been clicked.
-#        Make sure that we focus the pane in the :class:`.Arrangement`.
-#        """
-#        self._focus(app, buffer_name)
-#        super(_BufferMapping, self).focus(app, buffer_name)
-#
-#    def push(self, app, buffer_name):
-#        """
-#        Push to focus stack.
-#        """
-#        self._focus(app, buffer_name)
-#        super(_BufferMapping, self).push(app, buffer_name)
-#
-#    def _focus(self, app, buffer_name):
-#        if buffer_name.startswith('pane-'):
-#            id = int(buffer_name[len('pane-'):])
-#            pane = self.pymux.panes_by_id[id]
-#
-#            w = self.pymux.arrangement.get_active_window(app)
-#            w.active_pane = pane

@@ -33,9 +33,9 @@ ui_style = Style.from_dict({
     'commandline':                  'bg:#4e4e4e #ffffff',
     'commandline.command':          'bold',
     'commandline.prompt':           'bold',
-    'statusbar':                    'bg:ansigreen #000000',
+    'statusbar':                    'noreverse bg:ansigreen #000000',
     'statusbar window':             '',
-    'statusbar current-window':     '#88ff88 bold',
+    'statusbar current-window':     'reverse underline',
     'auto-suggestion':               'bg:#4e5e4e #88aa88',
     'message':                      'bg:#bbee88 #222222',
     'background':                   '#888888',
@@ -45,8 +45,8 @@ ui_style = Style.from_dict({
     'terminated':                   'bg:#aa0000 #ffffff',
 
     'confirmationtoolbar':          'bg:#880000 #ffffff',
-    'confirmationtoolbar.question': '',
-    'confirmationtoolbar.yesno':    'bg:#440000',
+    'confirmationtoolbar question': '',
+    'confirmationtoolbar yesno':    'bg:#440000',
 
     'search':                       'bg:#88aa88 #444444',
     'search.text':                  '',

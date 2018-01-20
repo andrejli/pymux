@@ -14,7 +14,7 @@ from prompt_toolkit.layout.dimension import LayoutDimension
 from prompt_toolkit.layout.dimension import LayoutDimension as D
 from prompt_toolkit.layout.lexers import Lexer
 from prompt_toolkit.layout.menus import CompletionsMenu
-from prompt_toolkit.layout.processors import BeforeInput, AfterInput, AppendAutoSuggestion, Processor, Transformation, HighlightSearchProcessor, HighlightSelectionProcessor, merge_processors
+from prompt_toolkit.layout.processors import BeforeInput, ShowArg, AfterInput, AppendAutoSuggestion, Processor, Transformation, HighlightSearchProcessor, HighlightSelectionProcessor, merge_processors
 from prompt_toolkit.layout.screen import Char
 from prompt_toolkit.layout.screen import Point
 from prompt_toolkit.layout.widgets.toolbars import FormattedTextToolbar
@@ -27,7 +27,7 @@ import pymux.arrangement as arrangement
 import datetime
 import weakref
 
-from .enums import COMMAND, PROMPT
+from .enums import COMMAND
 from .filters import WaitsForConfirmation, WaitsForPrompt, InCommandMode
 from .format import format_pymux_string
 from .log import logger
@@ -49,6 +49,7 @@ class Justify:
 class Z_INDEX:
     HIGHLIGHTED_BORDER = 2
     STATUS_BAR = 5
+    COMMAND_LINE = 6
 
 
 class Background(Container):
@@ -429,11 +430,13 @@ class LayoutManager(object):
                                 preview_search=True,
                                 input_processor=merge_processors([
                                     AppendAutoSuggestion(),
-#                                    DefaultPrompt(lambda: [(Token.CommandLine.Prompt, ':')]),
+                                    BeforeInput(':', style='class:commandline-prompt'),
+                                    ShowArg(),
                                     HighlightSelectionProcessor(),
-                                ]))
+                                ])),
+                            z_index=Z_INDEX.COMMAND_LINE,
                         ),
-                        filter=has_focus(COMMAND),
+                        filter=has_focus(self.client_state.command_buffer),
                     ),
                     # Other command-prompt commands toolbar.
                     ConditionalContainer(
@@ -446,9 +449,10 @@ class LayoutManager(object):
                                     BeforeInput(self._before_prompt_command_tokens),
                                     AppendAutoSuggestion(),
                                     HighlightSelectionProcessor(),
-                                ]))
+                                ])),
+                            z_index=Z_INDEX.COMMAND_LINE,
                         ),
-                        filter=has_focus(PROMPT),
+                        filter=has_focus(self.client_state.prompt_buffer),
                     ),
                 ])),
                 Float(xcursor=True, ycursor=True, content=CompletionsMenu(max_height=12)),
@@ -463,13 +467,13 @@ class ConfirmationToolbar(FormattedTextControl):
     def __init__(self, pymux, client_state):
         def get_tokens():
             return [
-                ('class:confirmationtoolbar.question', ' '),
-                ('class:confirmationtoolbar.question', format_pymux_string(
+                ('class:question', ' '),
+                ('class:question', format_pymux_string(
                     pymux, client_state.confirm_text or '')),
-                ('class:confirmationtoolbar.question', ' '),
-                ('class:confirmationtoolbar.yesno', '  y/n'),
+                ('class:question', ' '),
+                ('class:yesno', '  y/n'),
                 ('[SetCursorPosition]', ''),
-                ('class:confirmationtoolbar.yesno', '  '),
+                ('class:yesno', '  '),
             ]
 
         super(ConfirmationToolbar, self).__init__(

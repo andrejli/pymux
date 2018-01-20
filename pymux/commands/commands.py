@@ -455,7 +455,7 @@ def command_prompt(pymux, variables):
         client_state.prompt_text = ''
         client_state.prompt_command = ''
 
-        get_app().layout.focus(client_state.command_buffer)
+    get_app().layout.focus(client_state.prompt_buffer)
 
     # Go to insert mode.
     get_app().vi_state.input_mode = InputMode.INSERT
