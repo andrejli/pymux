@@ -394,7 +394,10 @@ class Window(object):
     def focus_next(self, count=1):
         " Focus the next pane. "
         panes = self.panes
-        self.active_pane = panes[(panes.index(self.active_pane) + count) % len(panes)]
+        if panes:
+            self.active_pane = panes[(panes.index(self.active_pane) + count) % len(panes)]
+        else:
+            self.active_pane = None  # No panes left.
 
     def focus_previous(self):
         " Focus the previous pane. "

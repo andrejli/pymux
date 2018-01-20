@@ -450,12 +450,14 @@ def command_prompt(pymux, variables):
         client_state.prompt_mode = True
         client_state.prompt_buffer.reset(Document(
             format_pymux_string(pymux, variables['<default>'] or '')))
+
+        get_app().layout.focus(client_state.prompt_buffer)
     else:
         # Show the ':' prompt.
         client_state.prompt_text = ''
         client_state.prompt_command = ''
 
-    get_app().layout.focus(client_state.prompt_buffer)
+        get_app().layout.focus(client_state.command_buffer)
 
     # Go to insert mode.
     get_app().vi_state.input_mode = InputMode.INSERT

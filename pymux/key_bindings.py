@@ -3,12 +3,11 @@ Key bindings.
 """
 from __future__ import unicode_literals
 from prompt_toolkit.enums import IncrementalSearchDirection
-from prompt_toolkit.filters import HasFocus, Condition, HasSelection
-from prompt_toolkit.key_binding.defaults import load_key_bindings
+from prompt_toolkit.filters import has_focus, Condition, has_selection
 from prompt_toolkit.key_binding.vi_state import InputMode
 from prompt_toolkit.keys import Keys
 from prompt_toolkit.selection import SelectionType
-from prompt_toolkit.key_binding import KeyBindings, merge_key_bindings, ConditionalKeyBindings
+from prompt_toolkit.key_binding import KeyBindings, merge_key_bindings
 
 from .enums import COMMAND, PROMPT
 from .filters import WaitsForConfirmation, HasPrefix, InScrollBuffer, InScrollBufferNotSearching, InScrollBufferSearching
@@ -35,25 +34,13 @@ class PymuxKeyBindings(object):
 
         self.custom_key_bindings = KeyBindings()
 
-        # Start from this KeyBindingManager from prompt_toolkit, to have basic
-        # editing functionality for the command line. These key binding are
-        # however only active when the following `enable_all` condition is met.
-        self.registry = merge_key_bindings([
-#            ConditionalKeyBindings(
-#                key_bindings=load_key_bindings(
-#                    enable_auto_suggest_bindings=True,
-#                    enable_search=False,  # We have our own search bindings, that support multiple panes.
-#                    enable_extra_page_navigation=True,
-#                    get_search_state=get_search_state),
-#                filter=(HasFocus(COMMAND) | HasFocus(PROMPT) |
-#                        InScrollBuffer(pymux)) & ~HasPrefix(pymux),
-#            ),
+        self.key_bindings = merge_key_bindings([
             self._load_builtins(),
             _load_search_bindings(pymux),
             self.custom_key_bindings,
         ])
 
-        self._prefix = (Keys.ControlB, )
+        self._prefix = ('c-b', )
         self._prefix_binding = None
 
         # Load initial bindings.
@@ -68,15 +55,14 @@ class PymuxKeyBindings(object):
         Load the prefix key binding.
         """
         pymux = self.pymux
-        registry = self.custom_key_bindings
 
         # Remove previous binding.
         if self._prefix_binding:
-            self.registry.remove_binding(self._prefix_binding)
+            self.key_bindings.remove_binding(self._prefix_binding)
 
         # Create new Python binding.
-        @registry.add_binding(*self._prefix, filter=
-            ~(HasPrefix(pymux) | HasFocus(COMMAND) | HasFocus(PROMPT) | WaitsForConfirmation(pymux)))
+        @self.custom_key_bindings.add(*self._prefix, filter=
+            ~(HasPrefix(pymux) | has_focus(COMMAND) | has_focus(PROMPT) | WaitsForConfirmation(pymux)))
         def enter_prefix_handler(event):
             " Enter prefix mode. "
             pymux.get_client_state().has_prefix = True
@@ -108,7 +94,7 @@ class PymuxKeyBindings(object):
         # Create filters.
         has_prefix = HasPrefix(pymux)
         waits_for_confirmation = WaitsForConfirmation(pymux)
-        prompt_or_command_focus = HasFocus(COMMAND) | HasFocus(PROMPT)
+        prompt_or_command_focus = has_focus(COMMAND) | has_focus(PROMPT)
         display_pane_numbers = Condition(lambda: pymux.display_pane_numbers)
         in_scroll_buffer_not_searching = InScrollBufferNotSearching(pymux)
         pane_input_allowed = ~(prompt_or_command_focus | has_prefix |
@@ -162,7 +148,7 @@ class PymuxKeyBindings(object):
 
         @kb.add('c-c', filter=prompt_or_command_focus & ~has_prefix)
         @kb.add('c-g', filter=prompt_or_command_focus & ~has_prefix)
-#        @kb.add('backspace', filter=HasFocus(COMMAND) & ~has_prefix &
+#        @kb.add('backspace', filter=has_focus(COMMAND) & ~has_prefix &
 #                              Condition(lambda: cli.buffers[COMMAND].text == ''))
         def _(event):
             " Leave command mode. "
@@ -206,13 +192,13 @@ class PymuxKeyBindings(object):
             " Enter selection mode when pressing space in copy mode. "
             event.current_buffer.start_selection(selection_type=SelectionType.CHARACTERS)
 
-        @kb.add('enter', filter=in_scroll_buffer_not_searching & HasSelection())
+        @kb.add('enter', filter=in_scroll_buffer_not_searching & has_selection)
         def _(event):
             " Copy selection when pressing Enter. "
             clipboard_data = event.current_buffer.copy_selection()
             event.app.clipboard.set_data(clipboard_data)
 
-        @kb.add('v', filter=in_scroll_buffer_not_searching & HasSelection())
+        @kb.add('v', filter=in_scroll_buffer_not_searching & has_selection)
         def _(event):
             " Toggle between selection types. "
             types = [SelectionType.LINES, SelectionType.BLOCK, SelectionType.CHARACTERS]
@@ -257,7 +243,7 @@ class PymuxKeyBindings(object):
             filter = ~HasPrefix(self.pymux)
 
         filter = filter & ~(WaitsForConfirmation(self.pymux) |
-                            HasFocus(COMMAND) | HasFocus(PROMPT))
+                            has_focus(COMMAND) | has_focus(PROMPT))
 
         def key_handler(event):
             " The actual key handler. "

@@ -133,7 +133,7 @@ class ClientState(object):
             input=self.input,
 
             layout=Layout(container=self.layout_manager.layout),
-            key_bindings=pymux.key_bindings_manager.registry,
+            key_bindings=pymux.key_bindings_manager.key_bindings,
             mouse_support=Condition(lambda: pymux.enable_mouse_support),
             full_screen=True,
             style=self.pymux.style,
@@ -196,7 +196,12 @@ class ClientState(object):
         if self.command_mode:
             return # Focus command
 
+        # No windows left, return. We will quit soon.
+        if not self.pymux.arrangement.windows:
+            return
+
         # Copy/search mode.
+
         pane = self.pymux.arrangement.get_active_pane()
         self.app.layout.focus(pane.terminal)
 
@@ -262,7 +267,6 @@ class Pymux(object):
         #: List of clients.
         self._runs_standalone = False
         self.connections = []
-        self.apps = {}  # Mapping from Connection to Application
 
         self._startup_done = False
         self.source_file = source_file
@@ -298,6 +302,10 @@ class Pymux(object):
         t = threading.Thread(target=run)
         t.daemon = True
         t.start()
+
+    @property
+    def apps(self):
+        return [c.app for c in self._client_states.values()]
 
     def get_client_state(self):
         """
@@ -398,7 +406,7 @@ class Pymux(object):
         def bell():
             " Sound bell on all clients. "
             if self.enable_bell:
-                for c in self.apps.values():
+                for c in self.apps:
                     c.output.bell()
 
         # Start directory.
@@ -456,11 +464,11 @@ class Pymux(object):
 
     def invalidate(self):
         " Invalidate the UI for all clients. "
-        for app in self.apps.values():
+        for app in self.apps:
             app.invalidate()
 
     def stop(self):
-        for app in self.apps.values():
+        for app in self.apps:
             app.set_return_value(None)
 
     def create_window(self, app=None, command=None, start_directory=None, name=None):  # XXX: remove 'app' argument.
@@ -504,10 +512,6 @@ class Pymux(object):
 
         # Remove from layout.
         self.arrangement.remove_pane(pane)
-
-        # No panes left? -> Quit.
-        if not self.arrangement.has_panes:
-            self.stop()
 
     def leave_command_mode(self, append_to_history=False):
         """
