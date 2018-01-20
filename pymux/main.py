@@ -14,7 +14,7 @@ from prompt_toolkit.layout.screen import Size
 from prompt_toolkit.output.vt100 import Vt100_Output, _get_size
 from prompt_toolkit.input.defaults import create_input
 
-#from .style import PymuxStyle
+from .style import ui_style
 from .arrangement import Arrangement, Pane, Window
 from .commands.commands import handle_command, call_command_handler
 from .commands.completer import create_command_completer
@@ -136,7 +136,7 @@ class ClientState(object):
             key_bindings=pymux.key_bindings_manager.registry,
             mouse_support=Condition(lambda: pymux.enable_mouse_support),
             full_screen=True,
-#            style=self.pymux.style,
+            style=self.pymux.style,
             on_invalidate=(lambda _: pymux.invalidate()))
 
         # Synchronize the Vi state with the CLI object.
@@ -153,6 +153,7 @@ class ClientState(object):
 
         app.key_processor.before_key_press += sync_vi_state
         app.key_processor.after_key_press += sync_vi_state
+        app.key_processor.after_key_press += self.sync_focus
 
         # Set render postpone time. (.1 instead of 0).
         # This small change ensures that if for a split second a process
@@ -179,7 +180,7 @@ class ClientState(object):
 
         return app
 
-    def sync_focus(self):
+    def sync_focus(self, *_):
         """
         Focus the focussed window from the pymux arrangement.
         """
@@ -284,7 +285,7 @@ class Pymux(object):
 
         self.arrangement = Arrangement()
 
-#        self.style = PymuxStyle()
+        self.style = ui_style
 
     def _start_auto_refresh_thread(self):
         """

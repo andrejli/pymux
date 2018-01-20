@@ -332,11 +332,11 @@ class LayoutManager(object):
                 result.append(('', ' '))
 
             if w == self.pymux.arrangement.get_active_window():
-                style = 'class:statusbar.window.current'
+                style = 'class:current-window'
                 format_str = self.pymux.window_status_current_format
 
             else:
-                style = 'class:statusbar.window'
+                style = 'class:window'
                 format_str = self.pymux.window_status_format
 
             result.append((
@@ -403,7 +403,7 @@ class LayoutManager(object):
                             dont_extend_width=True,
                             align=Align.RIGHT,
                             content=FormattedTextControl(self._get_status_right_tokens))
-                    ], z_index=Z_INDEX.STATUS_BAR, style='class:statusbar, bg:red'),
+                    ], z_index=Z_INDEX.STATUS_BAR, style='class:statusbar'),
                     filter=Condition(lambda: self.pymux.enable_status),
                 )
             ]),
@@ -974,7 +974,6 @@ def _move_focus(pymux, get_x, get_y):
         write_pos = pymux.get_client_state().layout_manager.pane_write_positions[window.active_pane]
     except KeyError:
         pass
-#        run_in_terminal(in_term)
     else:
         x = get_x(write_pos)
         y = get_y(write_pos)
@@ -984,7 +983,6 @@ def _move_focus(pymux, get_x, get_y):
             if (wp.xpos <= x < wp.xpos + wp.width and
                     wp.ypos <= y < wp.ypos + wp.height):
                 window.active_pane = pane
-                pymux.get_client_state().sync_focus()
                 return
 
 
