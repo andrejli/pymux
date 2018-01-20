@@ -5,9 +5,9 @@ import socket
 import tempfile
 
 from prompt_toolkit.layout.screen import Size
-from prompt_toolkit.terminal.vt100_input import InputStream
-from prompt_toolkit.terminal.vt100_output import Vt100_Output
+from prompt_toolkit.input.vt100_parser import Vt100Parser
 from prompt_toolkit.input import Input
+from prompt_toolkit.output.vt100 import Vt100_Output
 
 from .log import logger
 
@@ -35,7 +35,7 @@ class ServerConnection(object):
             self.cli.input_processor.feed(key)
             self.cli.input_processor.process_keys()
 
-        self._inputstream = InputStream(feed_key)
+        self._inputstream = Vt100Parser(feed_key)
 
         pymux.eventloop.add_reader(
             connection.fileno(), self._recv)

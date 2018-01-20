@@ -1,11 +1,11 @@
 from __future__ import unicode_literals
 
-from prompt_toolkit.eventloop.base import INPUT_TIMEOUT
-from prompt_toolkit.eventloop.posix import call_on_sigwinch
+#from prompt_toolkit.eventloop.base import INPUT_TIMEOUT
+#from prompt_toolkit.eventloop.posix import call_on_sigwinch
 from prompt_toolkit.eventloop.select import select_fds
-from prompt_toolkit.eventloop.posix_utils import PosixStdinReader
-from prompt_toolkit.terminal.vt100_input import raw_mode, cooked_mode
-from prompt_toolkit.terminal.vt100_output import _get_size, Vt100_Output
+from prompt_toolkit.input.posix_utils import PosixStdinReader
+from prompt_toolkit.input.vt100 import raw_mode, cooked_mode
+from prompt_toolkit.output.vt100 import _get_size, Vt100_Output
 
 from pymux.utils import nonblocking
 
@@ -14,10 +14,12 @@ import glob
 import json
 import os
 import signal
+import signal
 import socket
 import sys
 import tempfile
 
+INPUT_TIMEOUT = .5
 
 __all__ = (
     'Client',
@@ -84,7 +86,9 @@ class Client(object):
             socket_fd = self.socket.fileno()
             current_timeout = INPUT_TIMEOUT  # Timeout, used to flush escape sequences.
 
-            with call_on_sigwinch(self._send_size):
+            try:
+                signal.signal(signal.SIGWINCH, self._send_size)
+#            with call_on_sigwinch(self._send_size):
                 while True:
                     r = select_fds([stdin_fd, socket_fd], current_timeout)
 
@@ -119,6 +123,8 @@ class Client(object):
                         # Timeout. (Tell the server to flush the vt100 Escape.)
                         self._send_packet({'cmd': 'flush-input'})
                         current_timeout = None
+            finally:
+                signal.signal(signal.SIGWINCH, None)
 
     def _process(self, data_buffer):
         """

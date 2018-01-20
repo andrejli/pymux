@@ -1,31 +1,30 @@
 from __future__ import unicode_literals
 
 from prompt_toolkit.application import Application
+from prompt_toolkit.application.current import get_app, set_app
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
-from prompt_toolkit.buffer import Buffer, AcceptAction
-from prompt_toolkit.buffer_mapping import BufferMapping
-from prompt_toolkit.enums import DUMMY_BUFFER, EditingMode
-from prompt_toolkit.eventloop.callbacks import EventLoopCallbacks
+from prompt_toolkit.buffer import Buffer
+from prompt_toolkit.enums import EditingMode
+from prompt_toolkit.eventloop import get_event_loop
 from prompt_toolkit.eventloop.posix import PosixEventLoop
 from prompt_toolkit.filters import Condition
-from prompt_toolkit.input import PipeInput
-from prompt_toolkit.interface import CommandLineInterface
 from prompt_toolkit.key_binding.vi_state import InputMode
+from prompt_toolkit.layout.layout import Layout
 from prompt_toolkit.layout.screen import Size
-from prompt_toolkit.terminal.vt100_output import Vt100_Output, _get_size
+from prompt_toolkit.output.vt100 import Vt100_Output, _get_size
+from prompt_toolkit.input.defaults import create_input
 
+#from .style import PymuxStyle
 from .arrangement import Arrangement, Pane, Window
 from .commands.commands import handle_command, call_command_handler
 from .commands.completer import create_command_completer
 from .enums import COMMAND, PROMPT
-from .key_bindings import KeyBindingsManager
+from .key_bindings import PymuxKeyBindings
 from .layout import LayoutManager, Justify
 from .log import logger
 from .options import ALL_OPTIONS, ALL_WINDOW_OPTIONS
-from .process import Process
 from .rc import STARTUP_COMMANDS
 from .server import ServerConnection, bind_socket
-from .style import PymuxStyle
 from .utils import get_default_shell
 
 import os
@@ -47,15 +46,17 @@ class ClientState(object):
     """
     State information that is independent for each client.
     """
-    def __init__(self):
+    def __init__(self, pymux, input, output, connection):
+        self.pymux = pymux
+        self.input = input
+        self.output = output
+        self.connection = connection
+
         #: True when the prefix key (Ctrl-B) has been pressed.
         self.has_prefix = False
 
         #: Error/info message.
         self.message = None
-
-        # True when the command prompt is visible.
-        self.command_mode = False
 
         # When a "confirm-before" command is running,
         # Show this text in the command bar. When confirmed, execute
@@ -66,6 +67,150 @@ class ClientState(object):
         # When a "command-prompt" command is running.
         self.prompt_text = None
         self.prompt_command = None
+
+        # Input buffers.
+        self.command_buffer = Buffer(
+            name=COMMAND,
+            accept_handler=self._handle_command,
+            auto_suggest=AutoSuggestFromHistory(),
+            multiline=False,
+            completer=create_command_completer(pymux))
+
+        self.prompt_buffer = Buffer(
+            name=PROMPT,
+            accept_handler=self._handle_prompt_command,
+            multiline=False,
+            auto_suggest=AutoSuggestFromHistory())
+
+        # Layout.
+        self.layout_manager = LayoutManager(self.pymux, self)
+
+        self.app = self._create_app()
+
+    @property
+    def command_mode(self):
+        return get_app().layout.has_focus(COMMAND)
+
+    def _handle_command(self, buffer):
+        " When text is accepted in the command line. "
+        text = buffer.text
+
+        # First leave command mode. We want to make sure that the working
+        # pane is focussed again before executing the command handers.
+        self.pymux.leave_command_mode(append_to_history=True)
+
+        # Execute command.
+        self.pymux.handle_command(text)
+
+    def _handle_prompt_command(self, buffer):
+        " When a command-prompt command is accepted. "
+        text = buffer.text
+        prompt_command = self.prompt_command
+
+        # Leave command mode and handle command.
+        self.pymux.leave_command_mode(append_to_history=True)
+        self.pymux.handle_command(prompt_command.replace('%%', text))
+
+    def _create_app(self):
+        """
+        Create `Application` instance for this .
+        """
+        pymux = self.pymux
+
+        def on_focus_changed():
+            """ When the focus changes to a read/write buffer, make sure to go
+            to insert mode. This happens when the ViState was set to NAVIGATION
+            in the copy buffer. """
+            vi_state = app.vi_state
+
+            if app.current_buffer.read_only():
+                vi_state.input_mode = InputMode.NAVIGATION
+            else:
+                vi_state.input_mode = InputMode.INSERT
+
+        app = Application(
+            output=self.output,
+            input=self.input,
+
+            layout=Layout(container=self.layout_manager.layout),
+            key_bindings=pymux.key_bindings_manager.registry,
+            mouse_support=Condition(lambda: pymux.enable_mouse_support),
+            full_screen=True,
+#            style=self.pymux.style,
+            on_invalidate=(lambda _: pymux.invalidate()))
+
+        # Synchronize the Vi state with the CLI object.
+        # (This is stored in the current class, but expected to be in the
+        # CommandLineInterface.)
+        def sync_vi_state(_):
+            VI = EditingMode.VI
+            EMACS = EditingMode.EMACS
+
+            if self.confirm_text or self.prompt_command or self.command_mode:
+                app.editing_mode = VI if pymux.status_keys_vi_mode else EMACS
+            else:
+                app.editing_mode = VI if pymux.mode_keys_vi_mode else EMACS
+
+        app.key_processor.before_key_press += sync_vi_state
+        app.key_processor.after_key_press += sync_vi_state
+
+        # Set render postpone time. (.1 instead of 0).
+        # This small change ensures that if for a split second a process
+        # outputs a lot of information, we don't give the highest priority to
+        # rendering output. (Nobody reads that fast in real-time.)
+        app.max_render_postpone_time = .1  # Second.
+
+        # Hide message when a key has been pressed.
+        def key_pressed(_):
+            self.message = None
+        app.key_processor.before_key_press += key_pressed
+
+#        app._is_running = True
+
+        # The following code needs to run with the application active.
+        # Especially, `create_window` needs to know what the current
+        # application is, in order to focus the new pane.
+        with set_app(app):
+            # Redraw all CLIs. (Adding a new client could mean that the others
+            # change size, so everything has to be redrawn.)
+            pymux.invalidate()
+
+            pymux.startup()
+
+        return app
+
+    def sync_focus(self):
+        """
+        Focus the focussed window from the pymux arrangement.
+        """
+        # Confirm.
+        if self.confirm_text:
+            return
+
+        # Custom prompt.
+        if self.prompt_command:
+            return # Focus prompt
+
+        # Command mode.
+        if self.command_mode:
+            return # Focus command
+
+        # Copy/search mode.
+        pane = self.pymux.arrangement.get_active_pane()
+        self.app.layout.focus(pane.terminal)
+
+        return  # XXX
+
+        if pane and pane.display_scroll_buffer:
+            if False:  #  pane.is_searching:   # XXX TODO
+                pass # Focus search buffer.
+                #return 'search-%i' % pane.pane_id
+            else:
+                self.app.layout.focus(pane.terminal)
+
+                #return 'pane-%i' % pane.pane_id
+
+
 
 
 class Pymux(object):
@@ -84,10 +229,7 @@ class Pymux(object):
         p.run_standalone()
     """
     def __init__(self, source_file=None, startup_command=None):
-        self.arrangement = Arrangement()
-        self.layout_manager = LayoutManager(self)
-
-        self._client_states = weakref.WeakKeyDictionary()  # Mapping from CLI to ClientState.
+        self._client_states = {}  # connection -> client_state
 
         # Options
         self.enable_mouse_support = True
@@ -121,7 +263,7 @@ class Pymux(object):
         #: List of clients.
         self._runs_standalone = False
         self.connections = []
-        self.clis = {}  # Mapping from Connection to CommandLineInterface.
+        self.apps = {}  # Mapping from Connection to Application
 
         self._startup_done = False
         self.source_file = source_file
@@ -138,9 +280,11 @@ class Pymux(object):
         self.eventloop = PosixEventLoop()
 
         # Key bindings manager.
-        self.key_bindings_manager = KeyBindingsManager(self)
+        self.key_bindings_manager = PymuxKeyBindings(self)
 
-        self.style = PymuxStyle()
+        self.arrangement = Arrangement()
+
+#        self.style = PymuxStyle()
 
     def _start_auto_refresh_thread(self):
         """
@@ -156,22 +300,38 @@ class Pymux(object):
         t.daemon = True
         t.start()
 
-    def get_client_state(self, cli):
+    def get_client_state(self):
         """
         Return the ClientState instance for this CommandLineInterface.
         """
-        try:
-            return self._client_states[cli]
-        except KeyError:
-            s = ClientState()
-            self._client_states[cli] = s
-            return s
+        app = get_app()
+        for c in self._client_states.values():
+            if c.app == app:
+                return c
+        raise ValueError
 
-    def get_title(self, cli):
+    def startup(self):
+        # Handle start-up comands.
+        # (Does initial key bindings.)
+        if not self._startup_done:
+            self._startup_done = True
+
+            # Execute default config.
+            for cmd in STARTUP_COMMANDS.splitlines():
+                self.handle_command(cmd)
+
+            # Source the given file.
+            if self.source_file:
+                call_command_handler('source-file', self, [self.source_file])
+
+            # Make sure that there is one window created.
+            self.create_window(command=self.startup_command)
+
+    def get_title(self):
         """
         The title to be displayed in the titlebar of the terminal.
         """
-        w = self.arrangement.get_active_window(cli)
+        w = self.arrangement.get_active_window()
 
         if w and w.active_process:
             title = w.active_process.screen.title
@@ -183,17 +343,17 @@ class Pymux(object):
         else:
             return 'Pymux'
 
-    def get_window_size(self, cli):
+    def get_window_size(self):
         """
         Get the size to be used for the DynamicBody.
         This will be the smallest size of all clients.
         """
         get_active_window = self.arrangement.get_active_window
-        active_window = get_active_window(cli)
+        active_window = get_active_window()
 
         # Get connections watching the same window.
         connections = [c for c in self.connections if
-                       c.cli and get_active_window(c.cli) == active_window]
+                       c.app and get_active_window(c.app) == active_window]
 
         rows = [c.size.rows for c in connections]
         columns = [c.size.columns for c in connections]
@@ -231,14 +391,14 @@ class Pymux(object):
 
                 # No panes left? -> Quit.
                 if not self.arrangement.has_panes:
-                    self.eventloop.stop()
+                    self.stop()
 
             self.invalidate()
 
         def bell():
             " Sound bell on all clients. "
             if self.enable_bell:
-                for c in self.clis.values():
+                for c in self.apps.values():
                     c.output.bell()
 
         # Start directory.
@@ -276,55 +436,60 @@ class Pymux(object):
         def has_priority():
             return self.arrangement.pane_has_priority(pane)
 
-        process = Process.from_command(
-            self.eventloop, self.invalidate, command, done_callback,
-            bell_func=bell,
-            before_exec_func=before_exec,
-            has_priority=has_priority)
-
-        pane = Pane(process)
+#        process = Process.from_command(
+#            self.eventloop, self.invalidate, command, done_callback,
+#            bell_func=bell,
+#            before_exec_func=before_exec,
+#            has_priority=has_priority)
+#
+#        pane = Pane(process)
+        pane = Pane(done_callback=done_callback)
 
         # Keep track of panes. This is a WeakKeyDictionary, we only add, but
         # don't remove.
         self.panes_by_id[pane.pane_id] = pane
 
         logger.info('Created process %r.', command)
-        process.start()
+#        process.start()
 
         return pane
 
     def invalidate(self):
         " Invalidate the UI for all clients. "
-        for c in self.clis.values():
-            c.invalidate()
+        for app in self.apps.values():
+            app.invalidate()
 
-    def create_window(self, cli=None, command=None, start_directory=None, name=None):
+    def stop(self):
+        for app in self.apps.values():
+            app.set_return_value(None)
+
+    def create_window(self, app=None, command=None, start_directory=None, name=None):  # XXX: remove 'app' argument.
         """
         Create a new :class:`pymux.arrangement.Window` in the arrangement.
 
-        :param cli: If been given, this window will be focussed for that client.
+        :param app: If been given, this window will be focussed for that client.
         """
-        assert cli is None or isinstance(cli, CommandLineInterface)
         assert command is None or isinstance(command, six.text_type)
         assert start_directory is None or isinstance(start_directory, six.text_type)
 
         pane = self._create_pane(None, command, start_directory=start_directory)
 
-        self.arrangement.create_window(cli, pane, name=name)
+        self.arrangement.create_window(pane, name=name)
+        pane.focus()
         self.invalidate()
 
-    def add_process(self, cli, command=None, vsplit=False, start_directory=None):
+    def add_process(self, command=None, vsplit=False, start_directory=None):
         """
         Add a new process to the current window. (vsplit/hsplit).
         """
-        assert isinstance(cli, CommandLineInterface)
         assert command is None or isinstance(command, six.text_type)
         assert start_directory is None or isinstance(start_directory, six.text_type)
 
-        window = self.arrangement.get_active_window(cli)
+        window = self.arrangement.get_active_window()
 
         pane = self._create_pane(window, command, start_directory=start_directory)
         window.add_pane(pane, vsplit=vsplit)
+        pane.focus()
         self.invalidate()
 
     def kill_pane(self, pane):
@@ -342,138 +507,51 @@ class Pymux(object):
 
         # No panes left? -> Quit.
         if not self.arrangement.has_panes:
-            self.eventloop.stop()
+            self.stop()
 
-    def leave_command_mode(self, cli, append_to_history=False):
+    def leave_command_mode(self, append_to_history=False):
         """
         Leave the command/prompt mode.
         """
-        cli.buffers[COMMAND].reset(append_to_history=append_to_history)
-        cli.buffers[PROMPT].reset(append_to_history=True)
+        client_state = self.get_client_state()
 
-        client_state = self.get_client_state(cli)
-        client_state.command_mode = False
+        client_state.command_buffer.reset(append_to_history=append_to_history)
+        client_state.prompt_buffer.reset(append_to_history=True)
+
         client_state.prompt_command = ''
         client_state.confirm_command = ''
 
-    def handle_command(self, cli, command):
+        client_state.app.layout.focus_previous()
+
+    def handle_command(self, command):
         """
         Handle command from the command line.
         """
-        handle_command(self, cli, command)
+        handle_command(self, command)
 
-    def show_message(self, cli, message):
+    def show_message(self, message):
         """
         Set a warning message. This will be shown at the bottom until a key has
         been pressed.
 
-        :param cli: CommandLineInterface instance. (The client.)
         :param message: String.
         """
-        self.get_client_state(cli).message = message
+        self.get_client_state().message = message
 
-    def create_cli(self, connection, output, input=None):
-        """
-        Create `CommandLineInterface` instance for this connection.
-        """
-        def get_title():
-            return self.get_title(cli)
-
-        def on_focus_changed():
-            """ When the focus changes to a read/write buffer, make sure to go
-            to insert mode. This happens when the ViState was set to NAVIGATION
-            in the copy buffer. """
-            vi_state = cli.vi_state
-
-            if cli.current_buffer.read_only():
-                vi_state.input_mode = InputMode.NAVIGATION
-            else:
-                vi_state.input_mode = InputMode.INSERT
-
-        application = Application(
-            layout=self.layout_manager.layout,
-            key_bindings_registry=self.key_bindings_manager.registry,
-            buffers=_BufferMapping(self),
-            mouse_support=Condition(lambda cli: self.enable_mouse_support),
-            use_alternate_screen=True,
-            style=self.style,
-            get_title=get_title,
-            on_invalidate=(lambda cli: self.invalidate()))
-
-        cli = CommandLineInterface(
-            application=application,
-            output=output,
-            input=input,
-            eventloop=self.eventloop)
-
-        # Synchronize the Vi state with the CLI object.
-        # (This is stored in the current class, but expected to be in the
-        # CommandLineInterface.)
-        def sync_vi_state(_):
-            client_state = self.get_client_state(cli)
-            VI = EditingMode.VI
-            EMACS = EditingMode.EMACS
-
-            if (client_state.confirm_text or client_state.prompt_command or
-                    client_state.command_mode):
-                cli.editing_mode = VI if self.status_keys_vi_mode else EMACS
-            else:
-                cli.editing_mode = VI if self.mode_keys_vi_mode else EMACS
-
-        cli.input_processor.beforeKeyPress += sync_vi_state
-        cli.input_processor.afterKeyPress += sync_vi_state
-
-        # Set render postpone time. (.1 instead of 0).
-        # This small change ensures that if for a split second a process
-        # outputs a lot of information, we don't give the highest priority to
-        # rendering output. (Nobody reads that fast in real-time.)
-        cli.max_render_postpone_time = .1  # Second.
-
-        # Hide message when a key has been pressed.
-        def key_pressed(_):
-            self.get_client_state(cli).message = None
-        cli.input_processor.beforeKeyPress += key_pressed
-
-        cli._is_running = True
-
-        self.clis[connection] = cli
-
-        # Redraw all CLIs. (Adding a new client could mean that the others
-        # change size, so everything has to be redrawn.)
-        self.invalidate()
-
-        # Handle start-up comands.
-        # (Does initial key bindings.)
-        if not self._startup_done:
-            self._startup_done = True
-
-            # Execute default config.
-            for cmd in STARTUP_COMMANDS.splitlines():
-                self.handle_command(cli, cmd)
-
-            # Source the given file.
-            if self.source_file:
-                call_command_handler('source-file', self, cli, [self.source_file])
-
-            # Make sure that there is one window created.
-            self.create_window(cli, command=self.startup_command)
-
-        return cli
-
-    def get_connection_for_cli(self, cli):
+    def get_connection_for_cli(self, app):
         """
         Return the `CommandLineInterface` instance for this connection, if any.
         `None` otherwise.
         """
-        for connection, c in self.clis.items():
-            if c == cli:
+        for connection, a in self.apps.items():
+            if a == app:
                 return connection
 
-    def detach_client(self, cli):
+    def detach_client(self, app):
         """
         Detach the client that belongs to this CLI.
         """
-        connection = self.get_connection_for_cli(cli)
+        connection = self.get_connection_for_cli(app)
 
         if connection is not None:
             connection.detach_and_close()
@@ -493,7 +571,7 @@ class Pymux(object):
             self.socket_name, self.socket = bind_socket(socket_name)
             _ = os.umask(old_umask)
             self.socket.listen(0)
-            self.eventloop.add_reader(self.socket.fileno(), self._socket_accept)
+            get_event_loop().add_reader(self.socket.fileno(), self._socket_accept)
 
         # Set session_name according to socket name.
         if '.' in self.socket_name:
@@ -528,14 +606,8 @@ class Pymux(object):
         self._start_auto_refresh_thread()
 
         # Run eventloop.
-
-        # XXX: Both the PipeInput and DummyCallbacks are not used.
-        #      This is a workaround to run the PosixEventLoop continuously
-        #      without having a CommandLineInterface instance.
-        #      A better API in prompt_toolkit is desired.
         try:
-            self.eventloop.run(
-                PipeInput(), DummyCallbacks())
+            get_event_loop().run_forever()
         except:
             # When something bad happens, always dump the traceback.
             # (Otherwise, when running as a daemon, and stdout/stderr are not
@@ -558,136 +630,132 @@ class Pymux(object):
         """
         self._runs_standalone = True
         self._start_auto_refresh_thread()
-        cli = self.create_cli(
+        client_state = ClientState(self,
             connection=None,
+            input=create_input(),
             output=Vt100_Output.from_pty(
                 sys.stdout, true_color=true_color, ansi_colors_only=ansi_colors_only))
-        cli._is_running = False
-        cli.run()
+        self._client_states[None] = client_state
+#        app._is_running = False
+
+        client_state.app.run()
 
 
-class _BufferMapping(BufferMapping):
-    """
-    Container for all the Buffer objects in a CommandLineInterface.
-    """
-    def __init__(self, pymux):
-        self.pymux = pymux
-
-        def _handle_command(cli, buffer):
-            " When text is accepted in the command line. "
-            text = buffer.text
-
-            # First leave command mode. We want to make sure that the working
-            # pane is focussed again before executing the command handers.
-            pymux.leave_command_mode(cli, append_to_history=True)
-
-            # Execute command.
-            pymux.handle_command(cli, text)
-
-        def _handle_prompt_command(cli, buffer):
-            " When a command-prompt command is accepted. "
-            text = buffer.text
-            client_state = pymux.get_client_state(cli)
-            prompt_command = client_state.prompt_command
-
-            # Leave command mode and handle command.
-            pymux.leave_command_mode(cli, append_to_history=True)
-            pymux.handle_command(cli, prompt_command.replace('%%', text))
-
-        super(_BufferMapping, self).__init__({
-            COMMAND: Buffer(
-                complete_while_typing=True,
-                completer=create_command_completer(pymux),
-                accept_action=AcceptAction(handler=_handle_command),
-                auto_suggest=AutoSuggestFromHistory(),
-            ),
-            PROMPT: Buffer(
-                accept_action=AcceptAction(handler=_handle_prompt_command),
-                auto_suggest=AutoSuggestFromHistory(),
-            ),
-        })
-
-    def __getitem__(self, name):
-        " Override __getitem__ to make lookup of pane- buffers dynamic. "
-        if name.startswith('pane-'):
-            try:
-                id = int(name[len('pane-'):])
-                return self.pymux.panes_by_id[id].scroll_buffer
-            except (ValueError, KeyError):
-                raise KeyError
-
-        elif name.startswith('search-'):
-            try:
-                id = int(name[len('search-'):])
-                return self.pymux.panes_by_id[id].search_buffer
-            except (ValueError, KeyError):
-                raise KeyError
-        else:
-            return super(_BufferMapping, self).__getitem__(name)
-
-    def current(self, cli):
-        """
-        Return the currently focussed Buffer.
-        """
-        return self[self.current_name(cli)]
-
-    def current_name(self, cli):
-        """
-        Name of the current buffer.
-        """
-        client_state = self.pymux.get_client_state(cli)
-
-        # Confirm.
-        if client_state.confirm_text:
-            return DUMMY_BUFFER
-
-        # Custom prompt.
-        if client_state.prompt_command:
-            return PROMPT
-
-        # Command mode.
-        if client_state.command_mode:
-            return COMMAND
-
-        # Copy/search mode.
-        pane = self.pymux.arrangement.get_active_pane(cli)
-
-        if pane and pane.display_scroll_buffer:
-            if pane.is_searching:
-                return 'search-%i' % pane.pane_id
-            else:
-                return 'pane-%i' % pane.pane_id
-
-        return DUMMY_BUFFER
-
-    def focus(self, cli, buffer_name):
-        """
-        Focus buffer with the given name.
-
-        Called when a :class:`BufferControl` in the layout has been clicked.
-        Make sure that we focus the pane in the :class:`.Arrangement`.
-        """
-        self._focus(cli, buffer_name)
-        super(_BufferMapping, self).focus(cli, buffer_name)
-
-    def push(self, cli, buffer_name):
-        """
-        Push to focus stack.
-        """
-        self._focus(cli, buffer_name)
-        super(_BufferMapping, self).push(cli, buffer_name)
-
-    def _focus(self, cli, buffer_name):
-        if buffer_name.startswith('pane-'):
-            id = int(buffer_name[len('pane-'):])
-            pane = self.pymux.panes_by_id[id]
-
-            w = self.pymux.arrangement.get_active_window(cli)
-            w.active_pane = pane
-
-
-class DummyCallbacks(EventLoopCallbacks):
-    " Required in order to call eventloop.run() without having a CLI instance. "
-    def terminal_size_changed(self): pass
-    def input_timeout(self): pass
-    def feed_key(self, key): pass
+#class _BufferMapping(BufferMapping):
+#    """
+#    Container for all the Buffer objects in a CommandLineInterface.
+#    """
+#    def __init__(self, pymux):
+#        self.pymux = pymux
+#
+#        def _handle_command(app, buffer):
+#            " When text is accepted in the command line. "
+#            text = buffer.text
+#
+#            # First leave command mode. We want to make sure that the working
+#            # pane is focussed again before executing the command handers.
+#            pymux.leave_command_mode(append_to_history=True)
+#
+#            # Execute command.
+#            pymux.handle_command(app, text)
+#
+#        def _handle_prompt_command(app, buffer):
+#            " When a command-prompt command is accepted. "
+#            text = buffer.text
+#            client_state = pymux.get_client_state()
+#            prompt_command = client_state.prompt_command
+#
+#            # Leave command mode and handle command.
+#            pymux.leave_command_mode(append_to_history=True)
+#            pymux.handle_command(app, prompt_command.replace('%%', text))
+#
+#        super(_BufferMapping, self).__init__({
+#            COMMAND: Buffer(
+#                complete_while_typing=True,
+#                completer=create_command_completer(pymux),
+#                accept_handler=_handle_command,
+#                auto_suggest=AutoSuggestFromHistory(),
+#            ),
+#            PROMPT: Buffer(
+#                accept_handler=_handle_prompt_command,
+#                auto_suggest=AutoSuggestFromHistory(),
+#            ),
+#        })
+#
+#    def __getitem__(self, name):
+#        " Override __getitem__ to make lookup of pane- buffers dynamic. "
+#        if name.startswith('pane-'):
+#            try:
+#                id = int(name[len('pane-'):])
+#                return self.pymux.panes_by_id[id].scroll_buffer
+#            except (ValueError, KeyError):
+#                raise KeyError
+#
+#        elif name.startswith('search-'):
+#            try:
+#                id = int(name[len('search-'):])
+#                return self.pymux.panes_by_id[id].search_buffer
+#            except (ValueError, KeyError):
+#                raise KeyError
+#        else:
+#            return super(_BufferMapping, self).__getitem__(name)
+#
+#    def current(self, app):
+#        """
+#        Return the currently focussed Buffer.
+#        """
+#        return self[self.current_name(app)]
+#
+#    def current_name(self, app):
+#        """
+#        Name of the current buffer.
+#        """
+#        client_state = self.pymux.get_client_state()
+#
+#        # Confirm.
+#        if client_state.confirm_text:
+#            return DUMMY_BUFFER
+#
+#        # Custom prompt.
+#        if client_state.prompt_command:
+#            return PROMPT
+#
+#        # Command mode.
+#        if client_state.command_mode:
+#            return COMMAND
+#
+#        # Copy/search mode.
+#        pane = self.pymux.arrangement.get_active_pane(app)
+#
+#        if pane and pane.display_scroll_buffer:
+#            if pane.is_searching:
+#                return 'search-%i' % pane.pane_id
+#            else:
+#                return 'pane-%i' % pane.pane_id
+#
+#        return DUMMY_BUFFER
+#
+#    def focus(self, app, buffer_name):
+#        """
+#        Focus buffer with the given name.
+#
+#        Called when a :class:`BufferControl` in the layout has been clicked.
+#        Make sure that we focus the pane in the :class:`.Arrangement`.
+#        """
+#        self._focus(app, buffer_name)
+#        super(_BufferMapping, self).focus(app, buffer_name)
+#
+#    def push(self, app, buffer_name):
+#        """
+#        Push to focus stack.
+#        """
+#        self._focus(app, buffer_name)
+#        super(_BufferMapping, self).push(app, buffer_name)
+#
+#    def _focus(self, app, buffer_name):
+#        if buffer_name.startswith('pane-'):
+#            id = int(buffer_name[len('pane-'):])
+#            pane = self.pymux.panes_by_id[id]
+#
+#            w = self.pymux.arrangement.get_active_window(app)
+#            w.active_pane = pane
