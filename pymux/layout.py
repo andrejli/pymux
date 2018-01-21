@@ -525,7 +525,14 @@ class DynamicBody(Container):
             return _create_container_for_process(self.pymux, active_window.active_pane, zoom=True)
         else:
             window = self.pymux.arrangement.get_active_window()
-            return _create_split(self.pymux, window, window.root)
+            return HSplit([
+                # Some spacing for the top status bar.
+                ConditionalContainer(
+                    content=Window(height=1),
+                    filter=Condition(lambda: self.pymux.enable_pane_status)),
+                # The actual content.
+                _create_split(self.pymux, window, window.root)
+            ])
 
     def reset(self):
         for invalidation_hash, body in self._bodies_for_app.values():
@@ -636,8 +643,6 @@ def _create_split(pymux, window, split):
 
     content = []
     average_weight = get_average_weight()
-
-    # TODO: no vertical padding when there is a status bar.
 
     for i, item in enumerate(split):
         # Create function for calculating dimensions for child.
@@ -751,19 +756,6 @@ def _create_container_for_process(pymux, arrangement_pane, zoom=False):
 
     return FloatContainer(
         HSplit([
-            # The title bar.
-            ConditionalContainer(
-                content=VSplit([
-                        Window(
-                            height=1,
-                            content=FormattedTextControl(
-                                get_titlebar_text_fragments)),
-                        Window(
-                            height=1,
-                            width=4,
-                            content=FormattedTextControl(get_pane_index))
-                    ], style='class:titlebar'),
-                filter=Condition(lambda: pymux.enable_pane_status)),
             # The terminal.
             TracePaneWritePosition(
                 pymux, arrangement_pane,
@@ -772,13 +764,30 @@ def _create_container_for_process(pymux, arrangement_pane, zoom=False):
 
         #
         floats=[
+            # The title bar.
+            Float(content=
+                ConditionalContainer(
+                    content=VSplit([
+                            Window(
+                                height=1,
+                                content=FormattedTextControl(
+                                    get_titlebar_text_fragments)),
+                            Window(
+                                height=1,
+                                width=4,
+                                content=FormattedTextControl(get_pane_index))
+                        ], style='class:titlebar'),
+                    filter=Condition(lambda: pymux.enable_pane_status)),
+                left=0, right=0, top=-1, height=1, z_index=100),
+
             # The clock.
-            Float(content=ConditionalContainer(BigClock(on_click), filter=clock_is_visible)),
+            Float(content=ConditionalContainer(BigClock(on_click),
+                  filter=clock_is_visible)),
 
             # Pane number.
             Float(content=ConditionalContainer(
-                content=PaneNumber(pymux, arrangement_pane),
-                filter=pane_numbers_are_visible)),
+                  content=PaneNumber(pymux, arrangement_pane),
+                  filter=pane_numbers_are_visible)),
         ]
     )
 
