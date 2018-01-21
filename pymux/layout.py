@@ -969,11 +969,6 @@ def _move_focus(pymux, get_x, get_y):
     " Move focus of the active window. "
     window = pymux.arrangement.get_active_window()
 
-#    def in_term():
-#        print(pymux, get_x, get_y)
-#        import pdb; pdb.set_trace()
-#    from prompt_toolkit.application import run_in_terminal
-
     try:
         write_pos = pymux.get_client_state().layout_manager.pane_write_positions[window.active_pane]
     except KeyError:

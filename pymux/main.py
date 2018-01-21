@@ -200,21 +200,19 @@ class ClientState(object):
         if not self.pymux.arrangement.windows:
             return
 
-        # Copy/search mode.
-
         pane = self.pymux.arrangement.get_active_pane()
         self.app.layout.focus(pane.terminal)
 
-        return  # XXX
+        # Copy/search mode.
 
-        if pane and pane.display_scroll_buffer:
-            if False:  #  pane.is_searching:   # XXX TODO
-                pass # Focus search buffer.
-                #return 'search-%i' % pane.pane_id
-            else:
-                self.app.layout.focus(pane.terminal)
-
-                #return 'pane-%i' % pane.pane_id
+#        if pane and pane.display_scroll_buffer:
+#            if False:  #  pane.is_searching:   # XXX TODO
+#                pass # Focus search buffer.
+#                #return 'search-%i' % pane.pane_id
+#            else:
+#                self.app.layout.focus(pane.terminal)
+#
+#                #return 'pane-%i' % pane.pane_id
 
 
 class Pymux(object):
@@ -471,11 +469,9 @@ class Pymux(object):
         for app in self.apps:
             app.set_return_value(None)
 
-    def create_window(self, app=None, command=None, start_directory=None, name=None):  # XXX: remove 'app' argument.
+    def create_window(self, command=None, start_directory=None, name=None):
         """
         Create a new :class:`pymux.arrangement.Window` in the arrangement.
-
-        :param app: If been given, this window will be focussed for that client.
         """
         assert command is None or isinstance(command, six.text_type)
         assert start_directory is None or isinstance(start_directory, six.text_type)
@@ -542,7 +538,7 @@ class Pymux(object):
         """
         self.get_client_state().message = message
 
-    def get_connection_for_cli(self, app):
+    def get_connection_for_app(self, app):
         """
         Return the `CommandLineInterface` instance for this connection, if any.
         `None` otherwise.
@@ -555,7 +551,7 @@ class Pymux(object):
         """
         Detach the client that belongs to this CLI.
         """
-        connection = self.get_connection_for_cli(app)
+        connection = self.get_connection_for_app(app)
 
         if connection is not None:
             connection.detach_and_close()

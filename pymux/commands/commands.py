@@ -538,8 +538,6 @@ def copy_mode(pymux, variables):
     pane = pymux.arrangement.get_active_pane()
     pane.enter_copy_mode()
 
-    cli.buffers[SEARCH_BUFFER].reset()
-
 
 @cmd('paste-buffer')
 def paste_buffer(pymux, variables):
