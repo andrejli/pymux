@@ -28,8 +28,7 @@ import pymux.arrangement as arrangement
 import datetime
 import weakref
 
-from .enums import COMMAND
-from .filters import WaitsForConfirmation, WaitsForPrompt, InCommandMode
+from .filters import WaitsForConfirmation
 from .format import format_pymux_string
 from .log import logger
 
@@ -697,61 +696,52 @@ def _create_container_for_process(pymux, arrangement_pane, zoom=False):
     """
     Create a `Container` with a titlebar for a process.
     """
-    return TracePaneWritePosition(
-        pymux, arrangement_pane,
-        content=arrangement_pane.terminal)
+    @Condition
+    def clock_is_visible():
+        return arrangement_pane.clock_mode
 
-    '''
-    assert isinstance(arrangement_pane, arrangement.Pane)
-    process = arrangement_pane.process
+    @Condition
+    def pane_numbers_are_visible():
+        return pymux.display_pane_numbers
 
-    def has_focus():
-        return pymux.arrangement.get_active_pane() == arrangement_pane
+    def get_titlebar_name_style():
+        return 'class:titlebar.name.focussed' #if has_focus() else 'class:titlebar.name'
 
-    def get_titlebar_token():
-        return 'class:titlebar.focussed' if has_focus() else 'class:titlebar'
-
-    def get_titlebar_name_token():
-        return 'class:titlebar.name.focussed' if has_focus() else 'class:titlebar.name'
-
-    def get_title_tokens():
-        token = get_titlebar_token()
-        name_token = get_titlebar_name_token()
+    def get_titlebar_text_fragments():
+        name_style= get_titlebar_name_style()
         result = []
 
         if zoom:
-            result.append((Token.TitleBar.Zoom, ' Z '))
+            result.append(('class:titlebar-zoom', ' Z '))
 
-        if process.is_terminated:
-            result.append((Token.Terminated, ' Terminated '))
+        if arrangement_pane.process.is_terminated:
+            result.append(('class:terminated', ' Terminated '))
 
         # Scroll buffer info.
         if arrangement_pane.display_scroll_buffer:
-            result.append((token.CopyMode, ' %s ' % arrangement_pane.scroll_buffer_title))
+            result.append(('class:copymode', ' %s ' % arrangement_pane.scroll_buffer_title))
 
             # Cursor position.
             document = arrangement_pane.scroll_buffer.document
-            result.append((token.CopyMode.Position, ' %i,%i ' % (
+            result.append(('class:copymode.position', ' %i,%i ' % (
                 document.cursor_position_row, document.cursor_position_col)))
 
         if arrangement_pane.name:
-            result.append((name_token, ' %s ' % arrangement_pane.name))
-            result.append((token, ' '))
+            result.append((name_style, ' %s ' % arrangement_pane.name))
+            result.append(('', ' '))
 
         return result + [
-            (token.Title, format_pymux_string(pymux, ' #T ', pane=arrangement_pane))  # XXX: Make configurable.
+            ('', format_pymux_string(pymux, ' #T ', pane=arrangement_pane))  # XXX: Make configurable.
         ]
 
     def get_pane_index():
-        token = get_titlebar_token()
-
         try:
             w = pymux.arrangement.get_active_window()
             index = w.get_pane_index(arrangement_pane)
         except ValueError:
             index = '/'
 
-        return [(token.PaneIndex, '%3s ' % index)]
+        return '%3s ' % index
 
     def on_click():
         " Click handler for the clock. When clicked, select this pane. "
@@ -759,118 +749,38 @@ def _create_container_for_process(pymux, arrangement_pane, zoom=False):
         pymux.arrangement.get_active_window().active_pane = arrangement_pane
         pymux.invalidate()
 
-    def set_focus():
-        pymux.arrangement.get_active_window().active_pane = arrangement_pane
-        pymux.invalidate()
-
-    clock_is_visible = Condition(lambda: arrangement_pane.clock_mode)
-    pane_numbers_are_visible = Condition(lambda: pymux.display_pane_numbers)
-
-    return TracePaneWritePosition(
-        pymux, arrangement_pane,
-        content=HSplit([
+    return FloatContainer(
+        HSplit([
             # The title bar.
             ConditionalContainer(
                 content=VSplit([
                         Window(
-                            height=D.exact(1),
-                            content=TokenListControl(
-                                get_title_tokens,
-                                get_default_char=lambda: Char(' ', get_titlebar_token()))
-                        ),
+                            height=1,
+                            content=FormattedTextControl(
+                                get_titlebar_text_fragments)),
                         Window(
-                            height=D.exact(1),
-                            width=D.exact(4),
-                            content=TokenListControl(get_pane_index)
-                        )
-                    ]),
+                            height=1,
+                            width=4,
+                            content=FormattedTextControl(get_pane_index))
+                    ], style='class:titlebar'),
                 filter=Condition(lambda: pymux.enable_pane_status)),
-            # The pane content.
-            FloatContainer(
-                content=HSplit([
-                    # The 'screen' of the pseudo terminal.
-                    ConditionalContainer(
-                        content=Vt100Window(
-                            process=process,
-                            has_focus=Condition(lambda: (
-                                get_app().current_buffer_name != COMMAND and
-                                pymux.arrangement.get_active_pane() == arrangement_pane)),
-                            set_focus=set_focus,
-                        ),
-                        filter=~clock_is_visible & Condition(lambda: not arrangement_pane.display_scroll_buffer)),
+            # The terminal.
+            TracePaneWritePosition(
+                pymux, arrangement_pane,
+                content=arrangement_pane.terminal),
+        ]),
 
-                    # The copy/paste buffer.
-                    ConditionalContainer(
-                        content=Window(BufferControl(
-                            buffer_name='pane-%i' % arrangement_pane.pane_id,
-                            focus_on_click=True,
-                            default_char=Char(token=Token),
-                            preview_search=True,
-                            get_search_state=lambda: arrangement_pane.search_state,
-                            search_buffer_name='search-%i' % arrangement_pane.pane_id,
-                            input_processors=[
-                                _UseCopyTokenListProcessor(arrangement_pane),
-                                HighlightSearchProcessor(
-                                    search_buffer_name='search-%i' % arrangement_pane.pane_id,
-                                    get_search_state=lambda: arrangement_pane.search_state,
-                                    preview_search=True,
-                                ),
-                                HighlightSelectionProcessor(),
-                            ],
-                        ),
-                            wrap_lines=False,
-                        ),
-                        filter=~clock_is_visible & Condition(lambda: arrangement_pane.display_scroll_buffer)
-                    ),
-                    # Search toolbar. (Displayed when this pane has the focus, and searching.)
-                    ConditionalContainer(
-                        content=SearchWindow(pymux, arrangement_pane),
-                        filter=~clock_is_visible & Condition(lambda: arrangement_pane.is_searching)
-                    ),
-                    # The clock.
-                    ConditionalContainer(
-                        # Add a dummy VSplit/HSplit around the BigClock in order to center it.
-                        # (Using a FloatContainer to do the centering doesn't work well, because
-                        # the boundaries are not clipped when the parent is smaller.)
-                        content=VSplit([
-                            Window(_FillControl(on_click)),
-                            HSplit([
-                                Window(_FillControl(on_click)),
-                                BigClock(on_click),
-                                Window(_FillControl(on_click)),
-                            ]),
-                            Window(_FillControl(on_click)),
-                        ], get_dimensions=lambda: [None, D.exact(BigClock.WIDTH), None]),
+        #
+        floats=[
+            # The clock.
+            Float(content=ConditionalContainer(BigClock(on_click), filter=clock_is_visible)),
 
-                        filter=clock_is_visible,
-                    ),
-                ]),
-                # Pane numbers. (Centered.)
-                floats=[
-                    Float(content=ConditionalContainer(
-                        content=PaneNumber(pymux, arrangement_pane),
-                        filter=pane_numbers_are_visible)),
-                ]
-            )
-        ])
+            # Pane number.
+            Float(content=ConditionalContainer(
+                content=PaneNumber(pymux, arrangement_pane),
+                filter=pane_numbers_are_visible)),
+        ]
     )
-
-
-class _FillControl(FillControl):
-    """
-    Extension to `FillControl` with click handlers.
-    """
-    def __init__(self, click_callback=None):
-        self.click_callback = click_callback
-        super(_FillControl, self).__init__()
-
-    def mouse_handler(self, mouse_event):
-        " Call callback on click. "
-        if mouse_event.event_type == MouseEventType.MOUSE_UP and self.click_callback:
-            self.click_callback()
-        else:
-            return NotImplemented
-    '''
 
 
 class _ContainerProxy(Container):
@@ -947,7 +857,7 @@ class HighlightBordersIfActive(object):
         return self.container
 
 
-class TracePaneWritePosition(_ContainerProxy):
+class TracePaneWritePosition(_ContainerProxy):   # XXX: replace with SizedBox
     " Trace the write position of this pane. "
     def __init__(self, pymux, arrangement_pane, content):
         content = to_container(content)

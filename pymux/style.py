@@ -13,7 +13,7 @@ ui_style = Style.from_dict({
     'line':                         '#888888',
     'line focussed':                '#448844',
 
-    'titlebar':                     'bg:#888888 #dddddd ',
+    'titlebar':                     'bg:#aaaaaa #dddddd ',
     'titlebar.title':               '',
     'titlebar.name':                '#ffffff noitalic',
     'titlebar.name.focussed':       'bg:#88aa44',
