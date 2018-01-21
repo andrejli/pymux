@@ -10,18 +10,19 @@ from prompt_toolkit.filters import Condition, has_focus
 from prompt_toolkit.formatted_text import FormattedText
 from prompt_toolkit.layout.containers import VSplit, HSplit, Window, FloatContainer, Float, ConditionalContainer, Container, Align, to_container
 from prompt_toolkit.layout.controls import BufferControl, FormattedTextControl
-from prompt_toolkit.layout.dimension import LayoutDimension
-from prompt_toolkit.layout.dimension import LayoutDimension as D
+from prompt_toolkit.layout.dimension import Dimension
+from prompt_toolkit.layout.dimension import Dimension as D
+from prompt_toolkit.layout.dimension import to_dimension, is_dimension
 from prompt_toolkit.layout.lexers import Lexer
 from prompt_toolkit.layout.menus import CompletionsMenu
 from prompt_toolkit.layout.processors import BeforeInput, ShowArg, AfterInput, AppendAutoSuggestion, Processor, Transformation, HighlightSearchProcessor, HighlightSelectionProcessor, merge_processors
 from prompt_toolkit.layout.screen import Char
 from prompt_toolkit.layout.screen import Point
 from prompt_toolkit.layout.widgets.toolbars import FormattedTextToolbar
-from prompt_toolkit.mouse_events import MouseEvent
-from prompt_toolkit.mouse_events import MouseEventType
+from prompt_toolkit.mouse_events import MouseEvent, MouseEventType
 
 from six.moves import range
+from functools import partial
 
 import pymux.arrangement as arrangement
 import datetime
@@ -201,10 +202,10 @@ class PaneNumber(Container):
 
     def preferred_width(self, max_available_width):
         # Enough to display all the digits.
-        return LayoutDimension.exact(6 * len('%s' % self._get_index()) - 1)
+        return Dimension.exact(6 * len('%s' % self._get_index()) - 1)
 
     def preferred_height(self, width, max_available_height):
-        return LayoutDimension.exact(self.HEIGHT)
+        return Dimension.exact(self.HEIGHT)
 
     def write_to_screen(self, screen, mouse_handlers, write_position,
                         parent_style, erase_bg, z_index):
@@ -551,28 +552,54 @@ class DynamicBody(Container):
         return [body]
 
 
+class SizedBox(Container):
+    """
+    Container whith enforces a given width/height without taking the children
+    into account (even if no width/height is given).
+
+    :param content: `Container`.
+    :param report_write_position_callback: `None` or a callable for reporting
+        back the dimensions used while drawing.
+    """
+    def __init__(self, content, width=None, height=None,
+                 report_write_position_callback=None):
+        assert is_dimension(width)
+        assert is_dimension(height)
+        assert report_write_position_callback is None or callable(report_write_position_callback)
+
+        self.content = to_container(content)
+        self.width = width
+        self.height = height
+        self.report_write_position_callback = report_write_position_callback
+
+    def reset(self):
+        self.content.reset()
+
+    def preferred_width(self, max_available_width):
+        return to_dimension(self.width)
+
+    def preferred_height(self, width, max_available_height):
+        return to_dimension(self.height)
+
+    def write_to_screen(self, screen, mouse_handlers, write_position,
+                        parent_style, erase_bg, z_index):
+        # Report dimensions.
+        if self.report_write_position_callback:
+            self.report_write_position_callback(write_position)
+
+        self.content.write_to_screen(
+            screen, mouse_handlers, write_position, parent_style, erase_bg, z_index)
+
+    def get_children(self):
+        return [self.content]
+
+
 def _create_split(pymux, window, split):
     """
     Create a prompt_toolkit `Container` instance for the given pymux split.
     """
     assert isinstance(split, (arrangement.HSplit, arrangement.VSplit))
-
     is_vsplit = isinstance(split, arrangement.VSplit)
-    is_hsplit = not is_vsplit
-
-    content = []
-
-    # TODO: no vertical padding when there is a status bar.
-
-    for i, item in enumerate(split):
-        if isinstance(item, (arrangement.VSplit, arrangement.HSplit)):
-            content.append(_create_split(pymux, window, item))
-        elif isinstance(item, arrangement.Pane):
-            content.append(HighlightBordersIfActive(
-                window, item,
-                _create_container_for_process(pymux, item)))
-        else:
-            raise TypeError('Got %r' % (item,))
 
     def get_average_weight():
         """ Calculate average weight of the children. Return 1 if none of
@@ -590,33 +617,7 @@ def _create_split(pymux, window, split):
         else:
             return 1
 
-    def get_dimensions():
-        """
-        Return a list of LayoutDimension instances for this split.
-        These dimensions will take the weight from the
-        arrangement.VSplit/HSplit instances.
-        """
-        average_weight = get_average_weight()
-
-        # Make sure that weight is distributed
-
-        result = []
-        for i, item in enumerate(split):
-            result.append(D(weight=split.weights.get(item) or average_weight))
-
-            # Add dimension for the vertical border.
-            last_item = i == len(split) - 1
-            if is_vsplit and not last_item:
-                result.append(1)
-            elif is_hsplit and not last_item:
-                if pymux.enable_pane_status:
-                    result.append(0)
-                else:
-                    result.append(1)
-
-        return result
-
-    def report_dimensions_callback(dimensions):
+    def report_write_position_callback(item, write_position):
         """
         When the layout is rendered, store the actial dimensions as
         weights in the arrangement.VSplit/HSplit classes.
@@ -626,13 +627,41 @@ def _create_split(pymux, window, split):
         column. So, that updating weights corresponds exactly 1/1 to updating
         the size of the panes.
         """
-        sizes = []
-        for i, size in enumerate(dimensions):
-            if i % 2 == 0:
-                sizes.append(size)
+        if is_vsplit:
+            split.weights[item] = write_position.width
+        else:
+            split.weights[item] = write_position.height
 
-        for c, size in zip(split, sizes):
-            split.weights[c] = size
+    def get_size(item):
+        return D(weight=split.weights.get(item) or average_weight)
+
+    content = []
+    average_weight = get_average_weight()
+
+    # TODO: no vertical padding when there is a status bar.
+
+    for i, item in enumerate(split):
+        # Create function for calculating dimensions for child.
+        width = height = None
+        if is_vsplit:
+            width = partial(get_size, item)
+        else:
+            height = partial(get_size, item)
+
+        # Create child.
+        if isinstance(item, (arrangement.VSplit, arrangement.HSplit)):
+            child = _create_split(pymux, window, item)
+        elif isinstance(item, arrangement.Pane):
+            child = HighlightBordersIfActive(
+                window, item,
+                _create_container_for_process(pymux, item))
+        else:
+            raise TypeError('Got %r' % (item,))
+
+        # Wrap child in `SizedBox` to enforce dimensions and sync back.
+        content.append(SizedBox(
+            child, width=width, height=height,
+            report_write_position_callback=partial(report_write_position_callback, item)))
 
     # Create prompt_toolkit Container.
     if is_vsplit:
@@ -644,10 +673,7 @@ def _create_split(pymux, window, split):
 
     return return_cls(content,
             padding=1,
-            padding_char=padding_char,
-# get_dimensions=get_dimensions,
-# report_dimensions_callback=report_dimensions_callback)
-)
+            padding_char=padding_char)
 
 
 class _UseCopyTokenListProcessor(Processor):
@@ -998,10 +1024,10 @@ def _move_focus(pymux, get_x, get_y):
 #        pass
 #
 #    def preferred_width(self, max_available_width):
-#        return LayoutDimension()
+#        return Dimension()
 #
 #    def preferred_height(self, width, max_available_height):
-#        return LayoutDimension()
+#        return Dimension()
 #
 #    def write_to_screen(self, screen, mouse_handlers, write_position, parent_style, erase_bg, z_index):
 #        """
