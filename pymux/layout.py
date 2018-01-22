@@ -293,7 +293,9 @@ class MessageToolbar(FormattedTextToolbar):
             else:
                 return ''
 
-        f = Condition(lambda: get_message() is not None)
+        @Condition
+        def is_visible():
+            return bool(get_message())
 
         super(MessageToolbar, self).__init__(get_tokens,
 #                filter=f,
@@ -311,6 +313,13 @@ class LayoutManager(object):
         self.layout = self._create_layout()
 
         # Keep track of render information.
+        self.pane_write_positions = {}
+
+    def reset_write_positions(self):
+        """
+        Clear write positions right before rendering. (They are populated
+        during rendering).
+        """
         self.pane_write_positions = {}
 
     def _create_select_window_handler(self, window):
@@ -353,11 +362,13 @@ class LayoutManager(object):
     def _get_status_right_tokens(self):
         return format_pymux_string(self.pymux, self.pymux.status_right)
 
-    def _status_align_right(self):
-        return self.pymux.status_justify == Justify.RIGHT
-
-    def _status_align_center(self):
-        return self.pymux.status_justify == Justify.CENTER
+    def _get_align(self):
+        if self.pymux.status_justify == Justify.RIGHT:
+            return Align.RIGHT
+        elif self.pymux.status_justify == Justify.CENTER:
+            return Align.CENTER
+        else:
+            return Align.LEFT
 
     def _before_prompt_command_tokens(self):
         return [('class:commandline.prompt', '%s ' % (self.client_state.prompt_text, ))]
@@ -391,12 +402,8 @@ class LayoutManager(object):
                         Window(
                             height=1,
                             char=' ',
-                            align=Align.CENTER,
-                            content=FormattedTextControl(
-                                self._get_status_tokens,
-#                                align_right=Condition(self._status_align_right),
-#                                align_center=Condition(self._status_align_center),
-                                )),
+                            align=self._get_align,
+                            content=FormattedTextControl(self._get_status_tokens)),
                         # Right.
                         Window(
                             height=1,

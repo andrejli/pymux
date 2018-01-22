@@ -6,13 +6,12 @@ from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.buffer import Buffer
 from prompt_toolkit.enums import EditingMode
 from prompt_toolkit.eventloop import get_event_loop
-from prompt_toolkit.eventloop.posix import PosixEventLoop
 from prompt_toolkit.filters import Condition
+from prompt_toolkit.input.defaults import create_input
 from prompt_toolkit.key_binding.vi_state import InputMode
 from prompt_toolkit.layout.layout import Layout
 from prompt_toolkit.layout.screen import Size
-from prompt_toolkit.output.vt100 import Vt100_Output, _get_size
-from prompt_toolkit.input.defaults import create_input
+from prompt_toolkit.output.defaults import create_output
 
 from .style import ui_style
 from .arrangement import Arrangement, Pane, Window
@@ -74,6 +73,7 @@ class ClientState(object):
             accept_handler=self._handle_command,
             auto_suggest=AutoSuggestFromHistory(),
             multiline=False,
+            complete_while_typing=True,
             completer=create_command_completer(pymux))
 
         self.prompt_buffer = Buffer(
@@ -86,6 +86,12 @@ class ClientState(object):
         self.layout_manager = LayoutManager(self.pymux, self)
 
         self.app = self._create_app()
+
+        # Clear write positions right before rendering. (They are populated
+        # during rendering).
+        def before_render(_):
+            self.layout_manager.reset_write_positions()
+        self.app.before_render += before_render
 
     @property
     def command_mode(self):
@@ -277,9 +283,6 @@ class Pymux(object):
         self.socket = None
         self.socket_name = None
 
-        # Create eventloop.
-        self.eventloop = PosixEventLoop()
-
         # Key bindings manager.
         self.key_bindings_manager = PymuxKeyBindings(self)
 
@@ -354,20 +357,19 @@ class Pymux(object):
         Get the size to be used for the DynamicBody.
         This will be the smallest size of all clients.
         """
-        get_active_window = self.arrangement.get_active_window
-        active_window = get_active_window()
+        def active_window_for_app(app):
+            with set_app(app):
+                return self.arrangement.get_active_window()
 
-        # Get connections watching the same window.
-        connections = [c for c in self.connections if
-                       c.app and get_active_window(c.app) == active_window]
+        active_window = self.arrangement.get_active_window()
 
-        rows = [c.size.rows for c in connections]
-        columns = [c.size.columns for c in connections]
+        # Get sizes for connections watching the same window.
+        apps = [client_state.app for client_state in self._client_states.values()
+                if active_window_for_app(client_state.app) == active_window]
+        sizes = [app.output.get_size() for app in apps]
 
-        if self._runs_standalone:
-            r, c = _get_size(sys.stdout.fileno())
-            rows.append(r)
-            columns.append(c)
+        rows = [s.rows for s in sizes]
+        columns = [s.columns for s in sizes]
 
         if rows and columns:
             return Size(rows=min(rows) - (1 if self.enable_status else 0),
@@ -443,7 +445,7 @@ class Pymux(object):
             return self.arrangement.pane_has_priority(pane)
 
 #        process = Process.from_command(
-#            self.eventloop, self.invalidate, command, done_callback,
+#            self.invalidate, command, done_callback,
 #            bell_func=bell,
 #            before_exec_func=before_exec,
 #            has_priority=has_priority)
@@ -630,12 +632,27 @@ class Pymux(object):
         """
         self._runs_standalone = True
         self._start_auto_refresh_thread()
-        client_state = ClientState(self,
-            connection=None,
+
+        client_state = self.add_client(
             input=create_input(),
-            output=Vt100_Output.from_pty(
-                sys.stdout, true_color=true_color, ansi_colors_only=ansi_colors_only))
-        self._client_states[None] = client_state
-#        app._is_running = False
+            output=create_output(
+                stdout=sys.stdout, 
+                true_color=true_color, ansi_colors_only=ansi_colors_only),
+            connection=None)
 
         client_state.app.run()
+
+    def add_client(self, output, input, connection):
+        client_state = ClientState(self,
+            connection=None,
+            input=input,
+            output=output)
+
+        self._client_states[connection] = client_state
+        client_state.app.run_async()  # This returns a Future.
+
+        return client_state
+
+    def remove_client(self, connection):
+        if connection in self._client_states:
+            del self._client_states[connection]

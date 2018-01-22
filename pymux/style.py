@@ -35,7 +35,7 @@ ui_style = Style.from_dict({
     'commandline.prompt':           'bold',
     'statusbar':                    'noreverse bg:ansigreen #000000',
     'statusbar window':             '',
-    'statusbar current-window':     'reverse underline',
+    'statusbar current-window':     'bg:#008800 #000000',
     'auto-suggestion':               'bg:#4e5e4e #88aa88',
     'message':                      'bg:#bbee88 #222222',
     'background':                   '#888888',

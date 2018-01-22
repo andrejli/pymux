@@ -4,9 +4,11 @@ import json
 import socket
 import tempfile
 
-from prompt_toolkit.layout.screen import Size
-from prompt_toolkit.input.vt100_parser import Vt100Parser
+from prompt_toolkit.eventloop import get_event_loop
 from prompt_toolkit.input import Input
+from prompt_toolkit.input.vt100 import PipeInput
+from prompt_toolkit.input.vt100_parser import Vt100Parser
+from prompt_toolkit.layout.screen import Size
 from prompt_toolkit.output.vt100 import Vt100_Output
 
 from .log import logger
@@ -29,15 +31,16 @@ class ServerConnection(object):
         self._closed = False
 
         self._recv_buffer = b''
-        self.cli = None
+        self.client_state = None
 
         def feed_key(key):
-            self.cli.input_processor.feed(key)
-            self.cli.input_processor.process_keys()
+            self.client_state.app.key_processor.feed(key)
+            self.client_state.app.key_processor.process_keys()
 
         self._inputstream = Vt100Parser(feed_key)
+        self._pipeinput = _ClientInput(self._send_packet)
 
-        pymux.eventloop.add_reader(
+        get_event_loop().add_reader(
             connection.fileno(), self._recv)
 
     def _recv(self):
@@ -88,10 +91,12 @@ class ServerConnection(object):
 
         # Handle stdin.
         elif packet['cmd'] == 'in':
-            self._inputstream.feed(packet['data'])
+            self._pipeinput.send_text(packet['data'])
 
-        elif packet['cmd'] == 'flush-input':
-            self._inputstream.flush()  # Flush escape key.
+#            self._inputstream.feed(packet['data'])
+
+#        elif packet['cmd'] == 'flush-input':
+#            self._inputstream.flush()  # Flush escape key.  # XXX: I think we no longer need this.
 
         # Set size. (The client reports the size.)
         elif packet['cmd'] == 'size':
@@ -140,7 +145,7 @@ class ServerConnection(object):
         try:
             self.pymux.handle_command(self.cli, packet['data'])
         finally:
-            self._close_cli()
+            self._close_connection()
 
     def _create_cli(self, true_color=False, ansi_colors_only=False, term='xterm'):
         """
@@ -153,37 +158,33 @@ class ServerConnection(object):
                               ansi_colors_only=ansi_colors_only,
                               term=term,
                               write_binary=False)
-        input = _ClientInput(self._send_packet)
-        self.cli = self.pymux.create_cli(self, output, input)
 
-    def _close_cli(self):
-        if self in self.pymux.clis:
-            # This is important. If we would forget this, the server will
-            # render CLI output for clients that aren't connected anymore.
-            del self.pymux.clis[self]
+        self.client_state = self.pymux.add_client(output, self._pipeinput, self)
 
-        self.cli = None
+    def _close_connection(self):
+        # This is important. If we would forget this, the server will
+        # render CLI output for clients that aren't connected anymore.
+        self.pymux.remove_client(self)
+        self.client_state = None
+        self._closed = True
 
     def suspend_client_to_background(self):
         """
         Ask the client to suspend itself. (Like, when Ctrl-Z is pressed.)
         """
-        if self.cli:
+        if self.client_state:
             def suspend():
                 self._send_packet({'cmd': 'suspend'})
 
-            self.cli.run_in_terminal(suspend)
+            run_in_terminal(suspend)
 
     def detach_and_close(self):
         # Remove from Pymux.
-        self.pymux.connections.remove(self)
-        self._close_cli()
+        self._close_connection()
 
         # Remove from eventloop.
-        self.pymux.eventloop.remove_reader(self.connection.fileno())
+        get_event_loop().remove_reader(self.connection.fileno())
         self.connection.close()
-
-        self._closed = True
 
 
 def bind_socket(socket_name=None):
@@ -234,20 +235,17 @@ class _SocketStdout(object):
         self._buffer = []
 
 
-class _ClientInput(Input):
+class _ClientInput(PipeInput):
     """
     Input class that can be given to the CommandLineInterface.
     We only need this for turning the client into raw_mode/cooked_mode.
     """
     def __init__(self, send_packet):
+        super(_ClientInput, self).__init__()
         assert callable(send_packet)
         self.send_packet = send_packet
 
-    def fileno(self):
-        raise NotImplementedError
-
-    def read(self):
-        raise NotImplementedError
+    # Implement raw/cooked mode by sending this to the attached client.
 
     def raw_mode(self):
         return self._create_context_manager('raw')

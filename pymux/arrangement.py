@@ -104,42 +104,6 @@ class Pane(object):
         """
         self.terminal.enter_copy_mode()
 
-#        document, get_tokens_for_line = self.process.create_copy_document()
-#        self._enter_scroll_buffer('Copy', document, get_tokens_for_line)
-
-#    def display_text(self, text, title=''):
-#        """
-#        Display the given text in the scroll buffer.
-#        """
-#        document = Document(text, 0)
-#
-#        def get_tokens_for_line(lineno):
-#            return [(Token, document.lines[lineno])]
-#
-#        self._enter_scroll_buffer(
-#            title,
-#            document=document,
-#            get_tokens_for_line=get_tokens_for_line)
-
-#    def _enter_scroll_buffer(self, title, document, get_tokens_for_line):
-#        # Suspend child process.
-#        self.process.suspend()
-#
-#        self.scroll_buffer.set_document(document, bypass_readonly=True)
-#        self.copy_get_tokens_for_line = get_tokens_for_line
-#        self.display_scroll_buffer = True
-#        self.scroll_buffer_title = title
-#
-#        # Reset search state.
-#        self.search_state = SearchState(ignore_case=False)
-
-#    def exit_scroll_buffer(self):
-#        """
-#        Exit scroll buffer. (Exits help or copy mode.)
-#        """
-#        self.process.resume()
-#        self.display_scroll_buffer = False
-
     def focus(self):
         """
         Focus this pane.

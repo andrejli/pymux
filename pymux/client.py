@@ -14,7 +14,6 @@ import glob
 import json
 import os
 import signal
-import signal
 import socket
 import sys
 import tempfile
@@ -87,8 +86,10 @@ class Client(object):
             current_timeout = INPUT_TIMEOUT  # Timeout, used to flush escape sequences.
 
             try:
-                signal.signal(signal.SIGWINCH, self._send_size)
-#            with call_on_sigwinch(self._send_size):
+                def winch_handler(signum, frame):
+                    self._send_size()
+
+                signal.signal(signal.SIGWINCH, winch_handler)
                 while True:
                     r = select_fds([stdin_fd, socket_fd], current_timeout)
 
@@ -124,7 +125,7 @@ class Client(object):
                         self._send_packet({'cmd': 'flush-input'})
                         current_timeout = None
             finally:
-                signal.signal(signal.SIGWINCH, None)
+                signal.signal(signal.SIGWINCH, signal.SIG_IGN)
 
     def _process(self, data_buffer):
         """
