@@ -281,7 +281,7 @@ def kill_window(pymux, variables):
 
 @cmd('suspend-client')
 def suspend_client(pymux, variables):
-    connection = pymux.get_connection_for_cli(cli)
+    connection = pymux.get_connection()
 
     if connection:
         connection.suspend_client_to_background()
@@ -424,7 +424,7 @@ def detach_client(pymux, variables):
     """
     Detach client.
     """
-    pymux.detach_client()
+    pymux.detach_client(get_app())
 
 
 @cmd('confirm-before', options='[(-p <message>)] <command>')

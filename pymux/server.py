@@ -5,7 +5,6 @@ import socket
 import tempfile
 
 from prompt_toolkit.eventloop import get_event_loop
-from prompt_toolkit.input import Input
 from prompt_toolkit.input.vt100 import PipeInput
 from prompt_toolkit.input.vt100_parser import Vt100Parser
 from prompt_toolkit.layout.screen import Size
@@ -159,7 +158,11 @@ class ServerConnection(object):
                               term=term,
                               write_binary=False)
 
-        self.client_state = self.pymux.add_client(output, self._pipeinput, self)
+        self.client_state, future = self.pymux.add_client(output, self._pipeinput, self)
+
+        @future.add_done_callback
+        def done(_):
+            self._close_connection()
 
     def _close_connection(self):
         # This is important. If we would forget this, the server will
@@ -172,11 +175,7 @@ class ServerConnection(object):
         """
         Ask the client to suspend itself. (Like, when Ctrl-Z is pressed.)
         """
-        if self.client_state:
-            def suspend():
-                self._send_packet({'cmd': 'suspend'})
-
-            run_in_terminal(suspend)
+        self._send_packet({'cmd': 'suspend'})
 
     def detach_and_close(self):
         # Remove from Pymux.

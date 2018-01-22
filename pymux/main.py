@@ -309,13 +309,20 @@ class Pymux(object):
         return [c.app for c in self._client_states.values()]
 
     def get_client_state(self):
-        """
-        Return the ClientState instance for this CommandLineInterface.
-        """
+        " Return the active ClientState instance. "
         app = get_app()
-        for c in self._client_states.values():
-            if c.app == app:
-                return c
+        for client_state in self._client_states.values():
+            if client_state.app == app:
+                return client_state
+
+        raise ValueError
+
+    def get_connection(self):
+        " Return the active Connection instance. "
+        app = get_app()
+        for connection, client_state in self._client_states.items():
+            if client_state.app == app:
+                return connection
 
         raise ValueError
 
@@ -540,22 +547,12 @@ class Pymux(object):
         """
         self.get_client_state().message = message
 
-    def get_connection_for_app(self, app):
-        """
-        Return the `CommandLineInterface` instance for this connection, if any.
-        `None` otherwise.
-        """
-        for connection, a in self.apps.items():
-            if a == app:
-                return connection
-
     def detach_client(self, app):
         """
         Detach the client that belongs to this CLI.
         """
-        connection = self.get_connection_for_app(app)
-
-        if connection is not None:
+        connection = self.get_connection()
+        if connection:
             connection.detach_and_close()
 
         # Redraw all clients -> Maybe their size has to change.
@@ -633,7 +630,7 @@ class Pymux(object):
         self._runs_standalone = True
         self._start_auto_refresh_thread()
 
-        client_state = self.add_client(
+        client_state, _ = self.add_client(
             input=create_input(),
             output=create_output(
                 stdout=sys.stdout, 
@@ -649,9 +646,9 @@ class Pymux(object):
             output=output)
 
         self._client_states[connection] = client_state
-        client_state.app.run_async()  # This returns a Future.
+        future = client_state.app.run_async()  # This returns a Future.
 
-        return client_state
+        return client_state, future
 
     def remove_client(self, connection):
         if connection in self._client_states:
