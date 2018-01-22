@@ -12,7 +12,6 @@ from __future__ import unicode_literals
 from ptterm import Terminal
 from prompt_toolkit.application.current import get_app, set_app
 from prompt_toolkit.buffer import Buffer
-from prompt_toolkit.document import Document
 from prompt_toolkit.search_state import SearchState
 
 import math

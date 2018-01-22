@@ -7,7 +7,6 @@ import six
 
 from prompt_toolkit.application.current import get_app
 from prompt_toolkit.document import Document
-from prompt_toolkit.enums import SEARCH_BUFFER
 from prompt_toolkit.key_binding.vi_state import InputMode
 
 from pymux.arrangement import LayoutTypes

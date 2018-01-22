@@ -5,6 +5,7 @@ import socket
 import tempfile
 
 from prompt_toolkit.eventloop import get_event_loop
+from prompt_toolkit.application.current import set_app
 from prompt_toolkit.input.vt100 import PipeInput
 from prompt_toolkit.input.vt100_parser import Vt100Parser
 from prompt_toolkit.layout.screen import Size
@@ -92,8 +93,6 @@ class ServerConnection(object):
         elif packet['cmd'] == 'in':
             self._pipeinput.send_text(packet['data'])
 
-#            self._inputstream.feed(packet['data'])
-
 #        elif packet['cmd'] == 'flush-input':
 #            self._inputstream.flush()  # Flush escape key.  # XXX: I think we no longer need this.
 
@@ -114,7 +113,9 @@ class ServerConnection(object):
                 for c in self.pymux.connections:
                     c.detach_and_close()
 
-            self._create_cli(true_color=true_color, ansi_colors_only=ansi_colors_only, term=term)
+            self._create_app(
+                true_color=true_color, ansi_colors_only=ansi_colors_only,
+                term=term)
 
     def _send_packet(self, data):
         """
@@ -130,7 +131,7 @@ class ServerConnection(object):
         """
         Execute a run command from the client.
         """
-        create_temp_cli = self.cli is None
+        create_temp_cli = self.client_states is None
 
         if create_temp_cli:
             # If this client doesn't have a CLI. Create a Fake CLI where the
@@ -138,15 +139,17 @@ class ServerConnection(object):
             # will be removed before the render function is called, so it doesn't
             # hurt too much and makes the code easier.)
             pane_id = int(packet['pane_id'])
-            self._create_cli()
-            self.pymux.arrangement.set_active_window_from_pane_id(self.cli, pane_id)
+            self._create_app()
+            with set_app(self.client_state.app):
+                self.pymux.arrangement.set_active_window_from_pane_id(pane_id)
 
-        try:
-            self.pymux.handle_command(self.cli, packet['data'])
-        finally:
-            self._close_connection()
+        with set_app(self.client_state.app):
+            try:
+                self.pymux.handle_command(packet['data'])
+            finally:
+                self._close_connection()
 
-    def _create_cli(self, true_color=False, ansi_colors_only=False, term='xterm'):
+    def _create_app(self, true_color=False, ansi_colors_only=False, term='xterm'):
         """
         Create CommandLineInterface for this client.
         Called when the client wants to attach the UI to the server.
@@ -158,7 +161,8 @@ class ServerConnection(object):
                               term=term,
                               write_binary=False)
 
-        self.client_state, future = self.pymux.add_client(output, self._pipeinput, self)
+        self.client_state = self.pymux.add_client(output, self._pipeinput, self)
+        future = self.client_state.app.run_async()
 
         @future.add_done_callback
         def done(_):

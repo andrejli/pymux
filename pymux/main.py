@@ -5,7 +5,9 @@ from prompt_toolkit.application.current import get_app, set_app
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.buffer import Buffer
 from prompt_toolkit.enums import EditingMode
+from prompt_toolkit.eventloop import Future
 from prompt_toolkit.eventloop import get_event_loop
+from prompt_toolkit.eventloop.context import context
 from prompt_toolkit.filters import Condition
 from prompt_toolkit.input.defaults import create_input
 from prompt_toolkit.key_binding.vi_state import InputMode
@@ -271,6 +273,7 @@ class Pymux(object):
         #: List of clients.
         self._runs_standalone = False
         self.connections = []
+        self.done_f = Future()
 
         self._startup_done = False
         self.source_file = source_file
@@ -477,6 +480,7 @@ class Pymux(object):
     def stop(self):
         for app in self.apps:
             app.set_return_value(None)
+        self.done_f.set_result(None)
 
     def create_window(self, command=None, start_directory=None, name=None):
         """
@@ -589,8 +593,11 @@ class Pymux(object):
         # Note: We don't have to put this socket in non blocking mode.
         #       This can cause crashes when sending big packets on OS X.
 
-        connection = ServerConnection(self, connection, client_address)
-        self.connections.append(connection)
+        # We have to create a new `context`, because this will be the scope for
+        # a new prompt_toolkit.Application to become active.
+        with context():
+            connection = ServerConnection(self, connection, client_address)
+            self.connections.append(connection)
 
     def run_server(self):
         # Ignore keyboard. (When people run "pymux server" and press Ctrl-C.)
@@ -606,7 +613,7 @@ class Pymux(object):
 
         # Run eventloop.
         try:
-            get_event_loop().run_forever()
+            get_event_loop().run_until_complete(self.done_f)
         except:
             # When something bad happens, always dump the traceback.
             # (Otherwise, when running as a daemon, and stdout/stderr are not
@@ -630,7 +637,7 @@ class Pymux(object):
         self._runs_standalone = True
         self._start_auto_refresh_thread()
 
-        client_state, _ = self.add_client(
+        client_state = self.add_client(
             input=create_input(),
             output=create_output(
                 stdout=sys.stdout, 
@@ -646,9 +653,8 @@ class Pymux(object):
             output=output)
 
         self._client_states[connection] = client_state
-        future = client_state.app.run_async()  # This returns a Future.
 
-        return client_state, future
+        return client_state
 
     def remove_client(self, connection):
         if connection in self._client_states:
