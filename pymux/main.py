@@ -25,7 +25,6 @@ from .layout import LayoutManager, Justify
 from .log import logger
 from .options import ALL_OPTIONS, ALL_WINDOW_OPTIONS
 from .rc import STARTUP_COMMANDS
-from .server import ServerConnection, bind_socket
 from .utils import get_default_shell
 
 import os
@@ -571,6 +570,7 @@ class Pymux(object):
         Listen for clients on a Unix socket.
         Returns the socket name.
         """
+        from .server import bind_socket
         if self.socket is None:
             # Py2 uses 0027 and Py3 uses 0o027, but both know
             # how to create the right value from the string '0027'.
@@ -592,6 +592,7 @@ class Pymux(object):
         Accept connection from client.
         """
         logger.info('Client attached.')
+        from .server import ServerConnection
 
         connection, client_address = self.socket.accept()
         # Note: We don't have to put this socket in non blocking mode.

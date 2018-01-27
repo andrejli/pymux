@@ -1,7 +1,5 @@
 from __future__ import unicode_literals
 
-#from prompt_toolkit.eventloop.base import INPUT_TIMEOUT
-#from prompt_toolkit.eventloop.posix import call_on_sigwinch
 from prompt_toolkit.eventloop.select import select_fds
 from prompt_toolkit.input.posix_utils import PosixStdinReader
 from prompt_toolkit.input.vt100 import raw_mode, cooked_mode
