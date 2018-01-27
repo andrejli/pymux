@@ -2,33 +2,38 @@
 The color scheme.
 """
 from __future__ import unicode_literals
-from prompt_toolkit.styles import Style
+from prompt_toolkit.styles import Style, Priority
 
 __all__ = (
     'ui_style',
 )
 
 
-ui_style = Style.from_dict({
-    'line':                         '#888888',
-    'line focussed':                '#448844',
+ui_style = Style.from_dict({  # TODO: dict doesn't work here: the order is random.
+    'border':                         '#888888',
+    'terminal.focussed border':                '#00ff00 bold',
 
-    'titlebar':                     'bg:#aaaaaa #dddddd ',
-    'titlebar.title':               '',
-    'titlebar.name':                '#ffffff noitalic',
-    'titlebar.name.focussed':       'bg:#88aa44',
-    'titlebar.line':                '#444444',
-    'titlebar.line focussed':       '#448844 noinherit',
-    'titlebar focussed':            'bg:#5f875f #ffffff bold',
-    'titlebar.title focussed':      '',
-    'titlebar.zoom':                'bg:#884400 #ffffff',
-    'titlebar.paneindex':           '',
-    'titlebar.copymode':            'bg:#88aa88 #444444',
-    'titlebar.copymode.position':   '',
+    #'terminal titleba':            'bg:#aaaaaa #dddddd ',
+    'terminal titlebar':            'bg:#448844',
+    'terminal titlebar paneindex':  'bg:#888888 #000000',
 
-    'titlebar.paneindex focussed':         'bg:#88aa44 #ffffff',
-    'titlebar.copymode focussed':          'bg:#aaff44 #000000',
-    'titlebar.copymode.position focussed': '#888888',
+    'terminal.focussed titlebar':   'bg:#00ff00 #000000',
+    'terminal.focussed titlebar paneindex':         'bg:#ff0000',
+
+#    'titlebar title':               '',
+#    'titlebar name':                '#ffffff noitalic',
+#    'focussed-terminal titlebar name':       'bg:#88aa44',
+#    'titlebar.line':                '#444444',
+#    'titlebar.line focussed':       '#448844 noinherit',
+#    'titlebar focussed':            'bg:#5f875f #ffffff bold',
+#    'titlebar.title focussed':      '',
+#    'titlebar.zoom':                'bg:#884400 #ffffff',
+#    'titlebar paneindex':           '',
+#    'titlebar.copymode':            'bg:#88aa88 #444444',
+#    'titlebar.copymode.position':   '',
+
+#    'focussed-terminal titlebar.copymode':          'bg:#aaff44 #000000',
+#    'titlebar.copymode.position': '#888888',
 
     'commandline':                  'bg:#4e4e4e #ffffff',
     'commandline.command':          'bold',
@@ -55,4 +60,4 @@ ui_style = Style.from_dict({
 
     'search-match':                  '#000000 bg:#88aa88',
     'search-match.current':          '#000000 bg:#aaffaa underline',
-})
+}, priority=Priority.MOST_PRECISE)

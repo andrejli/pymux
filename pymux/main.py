@@ -244,7 +244,7 @@ class Pymux(object):
         # Options
         self.enable_mouse_support = True
         self.enable_status = True
-        self.enable_pane_status = False
+        self.enable_pane_status = True#False
         self.enable_bell = True
         self.remain_on_exit = False
         self.status_keys_vi_mode = False
@@ -410,6 +410,10 @@ class Pymux(object):
                 # No panes left? -> Quit.
                 if not self.arrangement.has_panes:
                     self.stop()
+
+                # Make sure the right pane is focussed for each client.
+                for client_state in self._client_states.values():
+                    client_state.sync_focus()
 
             self.invalidate()
 

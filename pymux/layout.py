@@ -5,7 +5,6 @@ The layout engine. This builds the prompt_toolkit layout.
 from __future__ import unicode_literals
 
 from prompt_toolkit.application.current import get_app
-from prompt_toolkit.enums import IncrementalSearchDirection
 from prompt_toolkit.filters import Condition, has_focus
 from prompt_toolkit.formatted_text import FormattedText
 from prompt_toolkit.layout.containers import VSplit, HSplit, Window, FloatContainer, Float, ConditionalContainer, Container, Align, to_container
@@ -13,9 +12,8 @@ from prompt_toolkit.layout.controls import BufferControl, FormattedTextControl
 from prompt_toolkit.layout.dimension import Dimension
 from prompt_toolkit.layout.dimension import Dimension as D
 from prompt_toolkit.layout.dimension import to_dimension, is_dimension
-from prompt_toolkit.layout.lexers import Lexer
 from prompt_toolkit.layout.menus import CompletionsMenu
-from prompt_toolkit.layout.processors import BeforeInput, ShowArg, AfterInput, AppendAutoSuggestion, Processor, Transformation, HighlightSearchProcessor, HighlightSelectionProcessor, merge_processors
+from prompt_toolkit.layout.processors import BeforeInput, ShowArg, AppendAutoSuggestion, Processor, Transformation, HighlightSelectionProcessor, merge_processors
 from prompt_toolkit.layout.screen import Char
 from prompt_toolkit.layout.screen import Point
 from prompt_toolkit.layout.widgets.toolbars import FormattedTextToolbar
@@ -178,7 +176,7 @@ class BigClock(Container):
         return []
 
 
-class PaneNumber(Container):
+class PaneNumber(Container):  # XXX: make FormattedTextControl
     """
     Number of panes, to be drawn in the middle of the pane.
     """
@@ -208,10 +206,7 @@ class PaneNumber(Container):
 
     def write_to_screen(self, screen, mouse_handlers, write_position,
                         parent_style, erase_bg, z_index):
-        if self.pymux.arrangement.get_active_pane() == self.arrangement_pane:
-            style = 'class:panenumber.focussed'
-        else:
-            style = 'class:panenumber'
+        style = 'class:panenumber'
 
         for i, d in enumerate('%s' % (self._get_index())):
             _draw_number(screen, write_position.xpos + i * 6, write_position.ypos,
@@ -219,55 +214,6 @@ class PaneNumber(Container):
 
     def get_children(self):
         return []
-
-
-class SearchWindow(Window):
-    """
-    Display the search input in copy mode.
-    """
-    def __init__(self, pymux, arrangement_pane):
-        assert isinstance(arrangement_pane, arrangement.Pane)
-
-        def focussed():
-            return pymux.arrangement.get_active_pane() == arrangement_pane
-
-        def get_before_input():
-            if not arrangement_pane.is_searching:
-                text = ''
-            elif arrangement_pane.search_state.direction == IncrementalSearchDirection.BACKWARD:
-                text = 'Search up: '
-            else:
-                text = 'Search down: '
-
-            if focussed():
-                return [(Token.Search.Focussed, text)]
-            else:
-                return [(Token.Search, text)]
-
-        def get_after_input():
-            if focussed():
-                return [(Token.Search.Focussed, ' ')]
-            else:
-                return []
-
-        class SearchLexer(Lexer):
-            " Color for the search string. "
-            def lex_document(self, document):
-                def get_line(lineno):
-                    text = document.lines[lineno]
-                    if focussed():
-                        return [(Token.Search.Focussed.Text, text)]
-                    else:
-                        return [(Token.Search.Text, text)]
-                return get_line
-
-        super(SearchWindow, self).__init__(
-            content=BufferControl(
-                buffer_name='search-%i' % arrangement_pane.pane_id,
-                input_processors=[BeforeInput(get_before_input), AfterInput(get_after_input)],
-                lexer=SearchLexer(),
-                default_char=Char(token=Token)),
-            dont_extend_height=True)
 
 
 class MessageToolbar(FormattedTextToolbar):
@@ -529,7 +475,8 @@ class DynamicBody(Container):
 
         # When zoomed, only show the current pane, otherwise show all of them.
         if active_window.zoom:
-            return _create_container_for_process(self.pymux, active_window.active_pane, zoom=True)
+            return to_container(_create_container_for_process(
+                self.pymux, active_window, active_window.active_pane, zoom=True))
         else:
             window = self.pymux.arrangement.get_active_window()
             return HSplit([
@@ -663,9 +610,7 @@ def _create_split(pymux, window, split):
         if isinstance(item, (arrangement.VSplit, arrangement.HSplit)):
             child = _create_split(pymux, window, item)
         elif isinstance(item, arrangement.Pane):
-            child = HighlightBordersIfActive(
-                window, item,
-                _create_container_for_process(pymux, item))
+            child = _create_container_for_process(pymux, window, item)
         else:
             raise TypeError('Got %r' % (item,))
 
@@ -704,7 +649,7 @@ class _UseCopyTokenListProcessor(Processor):
         return document.text
 
 
-def _create_container_for_process(pymux, arrangement_pane, zoom=False):
+def _create_container_for_process(pymux, window, arrangement_pane, zoom=False):
     """
     Create a `Container` with a titlebar for a process.
     """
@@ -716,11 +661,16 @@ def _create_container_for_process(pymux, arrangement_pane, zoom=False):
     def pane_numbers_are_visible():
         return pymux.display_pane_numbers
 
-    def get_titlebar_name_style():
-        return 'class:titlebar.name.focussed' #if has_focus() else 'class:titlebar.name'
+    terminal_is_focussed = has_focus(arrangement_pane.terminal)
+
+    def get_terminal_style():
+        if terminal_is_focussed():
+            result = 'class:terminal.focussed'
+        else:
+            result = 'class:terminal'
+        return result
 
     def get_titlebar_text_fragments():
-        name_style= get_titlebar_name_style()
         result = []
 
         if zoom:
@@ -739,7 +689,7 @@ def _create_container_for_process(pymux, arrangement_pane, zoom=False):
                 document.cursor_position_row, document.cursor_position_col)))
 
         if arrangement_pane.name:
-            result.append((name_style, ' %s ' % arrangement_pane.name))
+            result.append(('class:name', ' %s ' % arrangement_pane.name))
             result.append(('', ' '))
 
         return result + [
@@ -761,41 +711,48 @@ def _create_container_for_process(pymux, arrangement_pane, zoom=False):
         pymux.arrangement.get_active_window().active_pane = arrangement_pane
         pymux.invalidate()
 
-    return FloatContainer(
-        HSplit([
-            # The terminal.
-            TracePaneWritePosition(
-                pymux, arrangement_pane,
-                content=arrangement_pane.terminal),
-        ]),
 
-        #
-        floats=[
-            # The title bar.
-            Float(content=
-                ConditionalContainer(
-                    content=VSplit([
-                            Window(
-                                height=1,
-                                content=FormattedTextControl(
-                                    get_titlebar_text_fragments)),
-                            Window(
-                                height=1,
-                                width=4,
-                                content=FormattedTextControl(get_pane_index))
-                        ], style='class:titlebar'),
-                    filter=Condition(lambda: pymux.enable_pane_status)),
-                left=0, right=0, top=-1, height=1, z_index=100),
+    return HighlightBordersIfActive(
+        window,
+        arrangement_pane,
+        get_terminal_style,
+        FloatContainer(
+            HSplit([
+                # The terminal.
+                TracePaneWritePosition(
+                    pymux, arrangement_pane,
+                    content=arrangement_pane.terminal),
+            ]),
 
-            # The clock.
-            Float(content=ConditionalContainer(BigClock(on_click),
-                  filter=clock_is_visible)),
+            #
+            floats=[
+                # The title bar.
+                Float(content=
+                    ConditionalContainer(
+                        content=VSplit([
+                                Window(
+                                    height=1,
+                                    content=FormattedTextControl(
+                                        get_titlebar_text_fragments)),
+                                Window(
+                                    height=1,
+                                    width=4,
+                                    content=FormattedTextControl(get_pane_index),
+                                    style='class:paneindex')
+                            ], style='class:titlebar'),
+                        filter=Condition(lambda: pymux.enable_pane_status)),
+                    left=0, right=0, top=-1, height=1, z_index=100),
 
-            # Pane number.
-            Float(content=ConditionalContainer(
-                  content=PaneNumber(pymux, arrangement_pane),
-                  filter=pane_numbers_are_visible)),
-        ]
+                # The clock.
+                Float(content=ConditionalContainer(BigClock(on_click),
+                      filter=clock_is_visible)),
+
+                # Pane number.
+                Float(content=ConditionalContainer(
+                      content=PaneNumber(pymux, arrangement_pane),
+                      filter=pane_numbers_are_visible)),
+            ]
+        )
     )
 
 
@@ -839,7 +796,7 @@ class HighlightBordersIfActive(object):
     """
     Put borders around this control if active.
     """
-    def __init__(self, window, pane, content):
+    def __init__(self, window, pane, style, content):
         @Condition
         def is_selected():
             return window.active_pane == pane
@@ -848,13 +805,14 @@ class HighlightBordersIfActive(object):
                               bottom=None, width=None, height=None):
             return Float(
                 content=ConditionalContainer(
-                    Window(char=char, style='class:line'),
+                    Window(char=char, style='class:border'),
                     filter=is_selected),
                 left=left, right=right, top=top, bottom=bottom, width=width, height=height,
                 z_index=Z_INDEX.HIGHLIGHTED_BORDER)
 
         self.container = FloatContainer(
             content,
+            style=style,
             floats=[
                 # Sides.
                 conditional_float(_focussed_border_vertical, left=-1, top=0, bottom=0, width=1),
