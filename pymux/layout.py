@@ -288,7 +288,7 @@ class LayoutManager(object):
                 result.append(('', ' '))
 
             if w == self.pymux.arrangement.get_active_window():
-                style = 'class:current-window'
+                style = 'class:window.current'
                 format_str = self.pymux.window_status_current_format
 
             else:

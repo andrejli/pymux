@@ -9,15 +9,16 @@ __all__ = (
 )
 
 
-ui_style = Style.from_dict({  # TODO: dict doesn't work here: the order is random.
+ui_style = Style.from_dict({
     'border':                         '#888888',
-    'terminal.focused border':                '#00ff00 bold',
+    'terminal.focused border':      'ansigreen bold',
 
     #'terminal titleba':            'bg:#aaaaaa #dddddd ',
-    'terminal titlebar':            'bg:#448844',
-    'terminal titlebar paneindex':  'bg:#888888 #000000',
+    'terminal titlebar':            'bg:#888888 #ffffff',
+#    'terminal titlebar paneindex':  'bg:#888888 #000000',
 
-    'terminal.focused titlebar':   'bg:#00ff00 #000000',
+    'terminal.focused titlebar':   'bg:#448844 #ffffff',
+    'terminal.focused titlebar name':   'bg:#88aa44 #ffffff',
     'terminal.focused titlebar paneindex':         'bg:#ff0000',
 
 #    'titlebar title':               '',
@@ -38,9 +39,9 @@ ui_style = Style.from_dict({  # TODO: dict doesn't work here: the order is rando
     'commandline':                  'bg:#4e4e4e #ffffff',
     'commandline.command':          'bold',
     'commandline.prompt':           'bold',
-    'statusbar':                    'noreverse bg:ansigreen #000000',
-    'statusbar window':             '',
-    'statusbar current-window':     'bg:#008800 #000000',
+    'statusbar':                    'noreverse bg:#448844 #000000',
+    'statusbar window':             '#ffffff',
+    'statusbar window.current':     'bg:#44ff44 #000000',
     'auto-suggestion':               'bg:#4e5e4e #88aa88',
     'message':                      'bg:#bbee88 #222222',
     'background':                   '#888888',
@@ -53,10 +54,11 @@ ui_style = Style.from_dict({  # TODO: dict doesn't work here: the order is rando
     'confirmationtoolbar question': '',
     'confirmationtoolbar yesno':    'bg:#440000',
 
-    'search':                       'bg:#88aa88 #444444',
-    'search.text':                  '',
-    'search focused':              'bg:#aaff44 #444444',
-    'search.text focused':         'bold #000000',
+#    'search-toolbar':                       'bg:#88ff44 #444444',
+    'search-toolbar.prompt':                'bg:#88ff44 #444444',
+    'search-toolbar.text':                  'bg:#88ff44 #000000',
+#    'search-toolbar focused':              'bg:#aaff44 #444444',
+#    'search-toolbar.text focused':         'bold #000000',
 
     'search-match':                  '#000000 bg:#88aa88',
     'search-match.current':          '#000000 bg:#aaffaa underline',
