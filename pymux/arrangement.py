@@ -48,10 +48,10 @@ class Pane(object):
     """
     _pane_counter = 1000  # Start at 1000, to be sure to not confuse this with pane indexes.
 
-    def __init__(self, terminal=None, done_callback=None):
-        assert callable(done_callback)
+    def __init__(self, terminal=None):
+        assert isinstance(terminal, Terminal)
 
-        self.terminal = terminal or Terminal(done_callback=done_callback)
+        self.terminal = terminal
         self.chosen_name = None
 
         # Displayed the clock instead of this pane content.
@@ -569,19 +569,6 @@ class Arrangement(object):
         # The active window of the last CLI. Used as default when a new session
         # is attached.
         self._last_active_window = None
-
-    def pane_has_priority(self, pane):
-        """
-        Return True when this Pane sohuld get priority in the output processing.
-        This is true for panes that have the focus in any of the visible windows.
-        """
-        windows = set(self._active_window_for_cli.values())
-
-        for w in windows:
-            if w.active_pane == pane:
-                return True
-
-        return False
 
     def invalidation_hash(self):
         """

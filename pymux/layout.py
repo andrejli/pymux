@@ -661,11 +661,11 @@ def _create_container_for_process(pymux, window, arrangement_pane, zoom=False):
     def pane_numbers_are_visible():
         return pymux.display_pane_numbers
 
-    terminal_is_focussed = has_focus(arrangement_pane.terminal)
+    terminal_is_focused = has_focus(arrangement_pane.terminal)
 
     def get_terminal_style():
-        if terminal_is_focussed():
-            result = 'class:terminal.focussed'
+        if terminal_is_focused():
+            result = 'class:terminal.focused'
         else:
             result = 'class:terminal'
         return result
@@ -776,13 +776,13 @@ class _ContainerProxy(Container):
         return [self.content]
 
 
-_focussed_border_titlebar = '┃'
-_focussed_border_vertical = '┃'
-_focussed_border_horizontal = '━'
-_focussed_border_left_top = '┏'
-_focussed_border_right_top = '┓'
-_focussed_border_left_bottom = '┗'
-_focussed_border_right_bottom = '┛'
+_focused_border_titlebar = '┃'
+_focused_border_vertical = '┃'
+_focused_border_horizontal = '━'
+_focused_border_left_top = '┏'
+_focused_border_right_top = '┓'
+_focused_border_left_bottom = '┗'
+_focused_border_right_bottom = '┛'
 
 _border_vertical = '│'
 _border_horizontal = '─'
@@ -815,16 +815,16 @@ class HighlightBordersIfActive(object):
             style=style,
             floats=[
                 # Sides.
-                conditional_float(_focussed_border_vertical, left=-1, top=0, bottom=0, width=1),
-                conditional_float(_focussed_border_vertical, right=-1, top=0, bottom=0, width=1),
-                conditional_float(_focussed_border_horizontal, left=0, right=0, top=-1, height=1),
-                conditional_float(_focussed_border_horizontal, left=0, right=0, bottom=-1, height=1),
+                conditional_float(_focused_border_vertical, left=-1, top=0, bottom=0, width=1),
+                conditional_float(_focused_border_vertical, right=-1, top=0, bottom=0, width=1),
+                conditional_float(_focused_border_horizontal, left=0, right=0, top=-1, height=1),
+                conditional_float(_focused_border_horizontal, left=0, right=0, bottom=-1, height=1),
 
                 # Corners.
-                conditional_float(_focussed_border_left_top, left=-1, top=-1, width=1, height=1),
-                conditional_float(_focussed_border_right_top, right=-1, top=-1, width=1, height=1),
-                conditional_float(_focussed_border_left_bottom, left=-1, bottom=-1, width=1, height=1),
-                conditional_float(_focussed_border_right_bottom, right=-1, bottom=-1, width=1, height=1),
+                conditional_float(_focused_border_left_top, left=-1, top=-1, width=1, height=1),
+                conditional_float(_focused_border_right_top, right=-1, top=-1, width=1, height=1),
+                conditional_float(_focused_border_left_bottom, left=-1, bottom=-1, width=1, height=1),
+                conditional_float(_focused_border_right_bottom, right=-1, bottom=-1, width=1, height=1),
             ])
 
     def __pt_container__(self):
@@ -1033,7 +1033,7 @@ def _move_focus(pymux, get_x, get_y):
 #            if mouse_event.event_type == MouseEventType.MOUSE_UP:
 #                self.set_focus()
 #        else:
-#            # Already focussed, send event to application when it requested
+#            # Already focused, send event to application when it requested
 #            # mouse support.
 #            if process.screen.sgr_mouse_support_enabled:
 #                # Xterm SGR mode.

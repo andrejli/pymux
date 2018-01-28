@@ -26,6 +26,7 @@ from .log import logger
 from .options import ALL_OPTIONS, ALL_WINDOW_OPTIONS
 from .rc import STARTUP_COMMANDS
 from .utils import get_default_shell
+from ptterm import Terminal
 
 import os
 import signal
@@ -103,7 +104,7 @@ class ClientState(object):
         text = buffer.text
 
         # First leave command mode. We want to make sure that the working
-        # pane is focussed again before executing the command handers.
+        # pane is focused again before executing the command handers.
         self.pymux.leave_command_mode(append_to_history=True)
 
         # Execute command.
@@ -189,7 +190,7 @@ class ClientState(object):
 
     def sync_focus(self, *_):
         """
-        Focus the focussed window from the pymux arrangement.
+        Focus the focused window from the pymux arrangement.
         """
         # Confirm.
         if self.confirm_text:
@@ -410,7 +411,7 @@ class Pymux(object):
                 if not self.arrangement.has_panes:
                     self.stop()
 
-                # Make sure the right pane is focussed for each client.
+                # Make sure the right pane is focused for each client.
                 for client_state in self._client_states.values():
                     client_state.sync_focus()
 
@@ -453,25 +454,16 @@ class Pymux(object):
         else:
             command = [self.default_shell]
 
-        # Create process and pane.
-        def has_priority():
-            return self.arrangement.pane_has_priority(pane)
-
-#        process = Process.from_command(
-#            self.invalidate, command, done_callback,
-#            bell_func=bell,
-#            before_exec_func=before_exec,
-#            has_priority=has_priority)
-#
-#        pane = Pane(process)
-        pane = Pane(done_callback=done_callback)
+        # Create new pane and terminal.
+        terminal = Terminal(done_callback=done_callback, bell_func=bell,
+                            before_exec_func=before_exec)
+        pane = Pane(terminal)
 
         # Keep track of panes. This is a WeakKeyDictionary, we only add, but
         # don't remove.
         self.panes_by_id[pane.pane_id] = pane
 
         logger.info('Created process %r.', command)
-#        process.start()
 
         return pane
 

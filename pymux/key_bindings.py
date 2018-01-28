@@ -29,7 +29,7 @@ class PymuxKeyBindings(object):
         self.pymux = pymux
 
         def get_search_state():
-            " Return the currently active SearchState. (The one for the focussed pane.) "
+            " Return the currently active SearchState. (The one for the focused pane.) "
             return pymux.arrangement.get_active_pane().search_state
 
         self.custom_key_bindings = KeyBindings()
