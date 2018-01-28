@@ -16,8 +16,8 @@ from prompt_toolkit.layout.menus import CompletionsMenu
 from prompt_toolkit.layout.processors import BeforeInput, ShowArg, AppendAutoSuggestion, Processor, Transformation, HighlightSelectionProcessor, merge_processors
 from prompt_toolkit.layout.screen import Char
 from prompt_toolkit.layout.screen import Point
-from prompt_toolkit.layout.widgets.toolbars import FormattedTextToolbar
 from prompt_toolkit.mouse_events import MouseEvent, MouseEventType
+from prompt_toolkit.widgets.toolbars import FormattedTextToolbar
 
 from six.moves import range
 from functools import partial
