@@ -15,16 +15,17 @@ import signal
 import socket
 import sys
 import tempfile
+from .base import Client
 
 INPUT_TIMEOUT = .5
 
 __all__ = (
-    'Client',
+    'PosixClient',
     'list_clients',
 )
 
 
-class Client(object):
+class PosixClient(Client):
     def __init__(self, socket_name):
         self.socket_name = socket_name
         self._mode_context_managers = []

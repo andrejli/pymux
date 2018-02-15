@@ -26,7 +26,7 @@ Options:
 from __future__ import unicode_literals, absolute_import
 
 from pymux.main import Pymux
-from pymux.client import Client, list_clients
+from pymux.client import create_client, list_clients
 from pymux.utils import daemonize
 
 import docopt
@@ -107,7 +107,7 @@ def run():
         detach_other_clients = a['-d']
 
         if socket_name:
-            Client(socket_name).attach(
+            create_client(socket_name).attach(
                 detach_other_clients=detach_other_clients,
                 true_color=true_color,
                 ansi_colors_only=ansi_colors_only)
@@ -123,7 +123,7 @@ def run():
                 sys.exit(1)
 
     elif a['<command>'] and socket_name:
-        Client(socket_name).run_command(a['<command>'], pane_id)
+        create_client(socket_name).run_command(a['<command>'], pane_id)
 
     elif not socket_name:
         # Run client/server combination.
@@ -136,7 +136,7 @@ def run():
             # daemon. (Otherwise the `waitpid` call won't work.)
             mux.run_server()
         else:
-            Client(socket_name).attach(
+            create_client(socket_name).attach(
                 true_color=true_color, ansi_colors_only=ansi_colors_only)
 
     else:
