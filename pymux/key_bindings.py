@@ -2,15 +2,13 @@
 Key bindings.
 """
 from __future__ import unicode_literals
-from prompt_toolkit.enums import IncrementalSearchDirection
 from prompt_toolkit.filters import has_focus, Condition, has_selection
-from prompt_toolkit.key_binding.vi_state import InputMode
 from prompt_toolkit.keys import Keys
 from prompt_toolkit.selection import SelectionType
 from prompt_toolkit.key_binding import KeyBindings, merge_key_bindings
 
 from .enums import COMMAND, PROMPT
-from .filters import WaitsForConfirmation, HasPrefix, InScrollBuffer, InScrollBufferNotSearching, InScrollBufferSearching
+from .filters import WaitsForConfirmation, HasPrefix, InScrollBuffer, InScrollBufferNotSearching
 from .key_mappings import pymux_key_to_prompt_toolkit_key_sequence
 from .commands.commands import call_command_handler
 
@@ -36,7 +34,6 @@ class PymuxKeyBindings(object):
 
         self.key_bindings = merge_key_bindings([
             self._load_builtins(),
-            _load_search_bindings(pymux),
             self.custom_key_bindings,
         ])
 
@@ -282,113 +279,3 @@ class CustomBinding(object):
         self.handler = handler
         self.command = command
         self.arguments = arguments
-
-
-def _load_search_bindings(pymux):
-    """
-    Load the key bindings for searching. (Vi and Emacs)
-
-    This is different from the ones of prompt_toolkit, because we have a
-    individual search buffers for each pane.
-    """
-    kb = KeyBindings()
-    is_searching = InScrollBufferSearching(pymux)
-    in_scroll_buffer_not_searching = InScrollBufferNotSearching(pymux)
-
-    def search_buffer_is_empty():
-        """ Returns True when the search buffer is empty. """
-        return pymux.arrangement.get_active_pane().search_buffer.text == ''
-
-    @kb.add('c-g', filter=is_searching)
-    @kb.add('c-c', filter=is_searching)
-    @kb.add('backspace', filter=is_searching & Condition(search_buffer_is_empty))
-    def _(event):
-        """
-        Abort an incremental search and restore the original line.
-        """
-        pane = pymux.arrangement.get_active_pane()
-        pane.search_buffer.reset()
-        pane.is_searching = False
-
-    @kb.add('enter', filter=is_searching)
-    def _(event):
-        """
-        When enter pressed in isearch, accept search.
-        """
-        pane = pymux.arrangement.get_active_pane()
-
-        input_buffer = pane.scroll_buffer
-        search_buffer = pane.search_buffer
-
-        # Update search state.
-        if search_buffer.text:
-            pane.search_state.text = search_buffer.text
-
-        # Apply search.
-        input_buffer.apply_search(pane.search_state, include_current_position=True)
-
-        # Add query to history of search line.
-        search_buffer.append_to_history()
-
-        # Focus previous document again.
-        pane.search_buffer.reset()
-        pane.is_searching = False
-
-    def enter_search(app):
-        vi_state.input_mode = InputMode.INSERT
-
-        pane = pymux.arrangement.get_active_pane()
-        pane.is_searching = True
-        return pane.search_state
-
-    @kb.add('c-r', filter=in_scroll_buffer_not_searching)
-    @kb.add('?', filter=in_scroll_buffer_not_searching)
-    def _(event):
-        " Enter reverse search. "
-        search_state = enter_search(event.app)
-        search_state.direction = IncrementalSearchDirection.BACKWARD
-
-    @kb.add('c-s', filter=in_scroll_buffer_not_searching)
-    @kb.add('/', filter=in_scroll_buffer_not_searching)
-    def _(event):
-        " Enter forward search. "
-        search_state = enter_search(event.app)
-        search_state.direction = IncrementalSearchDirection.FORWARD
-
-    @kb.add('c-r', filter=is_searching)
-    @kb.add('up', filter=is_searching)
-    def _(event):
-        " Repeat reverse search. (While searching.) "
-        pane = pymux.arrangement.get_active_pane()
-
-        # Update search_state.
-        search_state = pane.search_state
-        direction_changed = search_state.direction != IncrementalSearchDirection.BACKWARD
-
-        search_state.text = pane.search_buffer.text
-        search_state.direction = IncrementalSearchDirection.BACKWARD
-
-        # Apply search to current buffer.
-        if not direction_changed:
-            pane.scroll_buffer.apply_search(
-                pane.search_state, include_current_position=False, count=event.arg)
-
-    @kb.add('c-s', filter=is_searching)
-    @kb.add('down', filter=is_searching)
-    def _(event):
-        " Repeat forward search. (While searching.) "
-        pane = pymux.arrangement.get_active_pane()
-
-        # Update search_state.
-        search_state = pane.search_state
-        direction_changed = search_state.direction != IncrementalSearchDirection.FORWARD
-
-        search_state.text = pane.search_buffer.text
-        search_state.direction = IncrementalSearchDirection.FORWARD
-
-        # Apply search to current buffer.
-        if not direction_changed:
-            pane.scroll_buffer.apply_search(
-                pane.search_state, include_current_position=False, count=event.arg)
-
-    return kb

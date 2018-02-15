@@ -12,7 +12,6 @@ from __future__ import unicode_literals
 from ptterm import Terminal
 from prompt_toolkit.application.current import get_app, set_app
 from prompt_toolkit.buffer import Buffer
-from prompt_toolkit.search_state import SearchState
 
 import math
 import os
@@ -70,11 +69,6 @@ class Pane(object):
         self.copy_get_tokens_for_line = lambda lineno: []
         self.display_scroll_buffer = False
         self.scroll_buffer_title = ''
-
-        # Search buffer, for use in copy mode. (Each pane gets its own search buffer.)
-        self.search_buffer = Buffer()
-        self.is_searching = False
-        self.search_state = SearchState(ignore_case=False)
 
     @property
     def process(self):
