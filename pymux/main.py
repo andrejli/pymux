@@ -75,7 +75,7 @@ class ClientState(object):
             accept_handler=self._handle_command,
             auto_suggest=AutoSuggestFromHistory(),
             multiline=False,
-            complete_while_typing=True,
+            complete_while_typing=False,
             completer=create_command_completer(pymux))
 
         self.prompt_buffer = Buffer(

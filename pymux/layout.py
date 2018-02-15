@@ -48,6 +48,7 @@ class Z_INDEX:
     HIGHLIGHTED_BORDER = 2
     STATUS_BAR = 5
     COMMAND_LINE = 6
+    MESSAGE_TOOLBAR = 7
 
 
 class Background(Container):
@@ -362,13 +363,15 @@ class LayoutManager(object):
                 )
             ]),
             floats=[
-                Float(bottom=1, left=0, content=MessageToolbar(self.client_state)),
+                Float(bottom=1, left=0, z_index=Z_INDEX.MESSAGE_TOOLBAR,
+                      content=MessageToolbar(self.client_state)),
                 Float(left=0, right=0, bottom=0, content=HSplit([
                     # Wait for confirmation toolbar.
                     ConditionalContainer(
                         content=Window(
                             height=1,
                             content=ConfirmationToolbar(self.pymux, self.client_state),
+                            z_index=Z_INDEX.COMMAND_LINE,
                         ),
                         filter=waits_for_confirmation,
                     ),
