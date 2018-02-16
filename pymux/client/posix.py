@@ -4,6 +4,7 @@ from prompt_toolkit.eventloop.select import select_fds
 from prompt_toolkit.input.posix_utils import PosixStdinReader
 from prompt_toolkit.input.vt100 import raw_mode, cooked_mode
 from prompt_toolkit.output.vt100 import _get_size, Vt100_Output
+from prompt_toolkit.output import ColorDepth
 
 from pymux.utils import nonblocking
 
@@ -59,20 +60,17 @@ class PosixClient(Client):
             'pane_id': pane_id
         })
 
-    def attach(self, detach_other_clients=False, ansi_colors_only=False, true_color=False):
+    def attach(self, detach_other_clients=False, color_depth=ColorDepth.DEPTH_8_BIT):
         """
         Attach client user interface.
         """
         assert isinstance(detach_other_clients, bool)
-        assert isinstance(ansi_colors_only, bool)
-        assert isinstance(true_color, bool)
 
         self._send_size()
         self._send_packet({
             'cmd': 'start-gui',
             'detach-others': detach_other_clients,
-            'ansi-colors-only': ansi_colors_only,
-            'true-color': true_color,
+            'color-depth': color_depth,
             'term': os.environ.get('TERM', ''),
             'data': ''
         })
@@ -200,6 +198,6 @@ def list_clients():
     p = '%s/pymux.sock.%s.*' % (tempfile.gettempdir(), getpass.getuser())
     for path in glob.glob(p):
         try:
-            yield Client(path)
+            yield PosixClient(path)
         except socket.error:
             pass

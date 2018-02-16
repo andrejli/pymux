@@ -25,6 +25,7 @@ Options:
 """
 from __future__ import unicode_literals, absolute_import
 
+from prompt_toolkit.output import ColorDepth
 from pymux.main import Pymux
 from pymux.client import create_client, list_clients
 from pymux.utils import daemonize
@@ -57,6 +58,14 @@ def run():
     else:
         pane_id = None
 
+    # Color depth.
+    if ansi_colors_only:
+        color_depth = ColorDepth.DEPTH_4_BIT
+    elif true_color:
+        color_depth = ColorDepth.DEPTH_24_BIT
+    else:
+        color_depth = ColorDepth.DEPTH_8_BIT
+
     # Expand socket name. (Make it possible to just accept numbers.)
     if socket_name and socket_name.isdigit():
         socket_name = '%s/pymux.sock.%s.%s' % (
@@ -78,7 +87,7 @@ def run():
         logging.basicConfig(filename=a['<logfile>'], level=logging.DEBUG)
 
     if a['standalone']:
-        mux.run_standalone(true_color=true_color, ansi_colors_only=ansi_colors_only)
+        mux.run_standalone(color_depth=color_depth)
 
     elif a['list-sessions'] or a['<command>'] in ('ls', 'list-sessions'):
         for c in list_clients():
@@ -109,14 +118,12 @@ def run():
         if socket_name:
             create_client(socket_name).attach(
                 detach_other_clients=detach_other_clients,
-                true_color=true_color,
-                ansi_colors_only=ansi_colors_only)
+                color_depth=color_depth)
         else:
             # Connect to the first server.
             for c in list_clients():
                 c.attach(detach_other_clients=detach_other_clients,
-                         true_color=true_color,
-                         ansi_colors_only=ansi_colors_only)
+                         color_depth=color_depth)
                 break
             else:  # Nobreak.
                 print('No pymux instance found.')
@@ -136,8 +143,7 @@ def run():
             # daemon. (Otherwise the `waitpid` call won't work.)
             mux.run_server()
         else:
-            create_client(socket_name).attach(
-                true_color=true_color, ansi_colors_only=ansi_colors_only)
+            create_client(socket_name).attach(color_depth=color_depth)
 
     else:
         if socket_name_from_env:

@@ -105,17 +105,14 @@ class ServerConnection(object):
         # Start GUI. (Create CommandLineInterface front-end for pymux.)
         elif packet['cmd'] == 'start-gui':
             detach_other_clients = bool(packet['detach-others'])
-            true_color = bool(packet['true-color'])
-            ansi_colors_only = bool(packet['ansi-colors-only'])
+            color_depth = packet['color-depth']
             term = packet['term']
 
             if detach_other_clients:
                 for c in self.pymux.connections:
                     c.detach_and_close()
 
-            self._create_app(
-                true_color=true_color, ansi_colors_only=ansi_colors_only,
-                term=term)
+            self._create_app(color_depth=color_depth, term=term)
 
     def _send_packet(self, data):
         """
@@ -149,19 +146,19 @@ class ServerConnection(object):
             finally:
                 self._close_connection()
 
-    def _create_app(self, true_color=False, ansi_colors_only=False, term='xterm'):
+    def _create_app(self, color_depth, term='xterm'):
         """
         Create CommandLineInterface for this client.
         Called when the client wants to attach the UI to the server.
         """
         output = Vt100_Output(_SocketStdout(self._send_packet),
                               lambda: self.size,
-                              true_color=true_color,
-                              ansi_colors_only=ansi_colors_only,
                               term=term,
                               write_binary=False)
 
-        self.client_state = self.pymux.add_client(output, self._pipeinput, self)
+        self.client_state = self.pymux.add_client(
+            input=self._pipeinput, output=output, connection=self, color_depth=color_depth)
+
         future = self.client_state.app.run_async()
 
         @future.add_done_callback

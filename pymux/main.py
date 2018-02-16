@@ -47,10 +47,11 @@ class ClientState(object):
     """
     State information that is independent for each client.
     """
-    def __init__(self, pymux, input, output, connection):
+    def __init__(self, pymux, input, output, color_depth, connection):
         self.pymux = pymux
         self.input = input
         self.output = output
+        self.color_depth = color_depth
         self.connection = connection
 
         #: True when the prefix key (Ctrl-B) has been pressed.
@@ -139,6 +140,7 @@ class ClientState(object):
         app = Application(
             output=self.output,
             input=self.input,
+            color_depth=self.color_depth,
 
             layout=Layout(container=self.layout_manager.layout),
             key_bindings=pymux.key_bindings_manager.key_bindings,
@@ -626,7 +628,7 @@ class Pymux(object):
             # Clean up socket.
             os.remove(self.socket_name)
 
-    def run_standalone(self, true_color=False, ansi_colors_only=False):
+    def run_standalone(self, color_depth):
         """
         Run pymux standalone, rather than using a client/server architecture.
         This is mainly useful for debugging.
@@ -636,18 +638,18 @@ class Pymux(object):
 
         client_state = self.add_client(
             input=create_input(),
-            output=create_output(
-                stdout=sys.stdout, 
-                true_color=true_color, ansi_colors_only=ansi_colors_only),
+            output=create_output(stdout=sys.stdout),
+            color_depth=color_depth,
             connection=None)
 
         client_state.app.run()
 
-    def add_client(self, output, input, connection):
+    def add_client(self, output, input, color_depth, connection):
         client_state = ClientState(self,
             connection=None,
             input=input,
-            output=output)
+            output=output,
+            color_depth=color_depth)
 
         self._client_states[connection] = client_state
 
