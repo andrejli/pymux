@@ -384,12 +384,12 @@ class LayoutManager(object):
                             content=BufferControl(
                                 buffer=self.client_state.command_buffer,
                                 preview_search=True,
-                                input_processor=merge_processors([
+                                input_processors=[
                                     AppendAutoSuggestion(),
                                     BeforeInput(':', style='class:commandline-prompt'),
                                     ShowArg(),
                                     HighlightSelectionProcessor(),
-                                ])),
+                                ]),
                             z_index=Z_INDEX.COMMAND_LINE,
                         ),
                         filter=has_focus(self.client_state.command_buffer),
@@ -401,11 +401,11 @@ class LayoutManager(object):
                             style='class:commandline',
                             content=BufferControl(
                                 buffer=self.client_state.prompt_buffer,
-                                input_processor=merge_processors([
+                                input_processors=[
                                     BeforeInput(self._before_prompt_command_tokens),
                                     AppendAutoSuggestion(),
                                     HighlightSelectionProcessor(),
-                                ])),
+                                ]),
                             z_index=Z_INDEX.COMMAND_LINE,
                         ),
                         filter=has_focus(self.client_state.prompt_buffer),
