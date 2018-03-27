@@ -476,7 +476,7 @@ class Pymux(object):
 
     def stop(self):
         for app in self.apps:
-            app.set_result(None)
+            app.exit()
         self.done_f.set_result(None)
 
     def create_window(self, command=None, start_directory=None, name=None):
