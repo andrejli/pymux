@@ -7,7 +7,7 @@ from __future__ import unicode_literals
 from prompt_toolkit.application.current import get_app
 from prompt_toolkit.filters import Condition, has_focus
 from prompt_toolkit.formatted_text import FormattedText
-from prompt_toolkit.layout.containers import VSplit, HSplit, Window, FloatContainer, Float, ConditionalContainer, Container, Align, to_container
+from prompt_toolkit.layout.containers import VSplit, HSplit, Window, FloatContainer, Float, ConditionalContainer, Container, WindowAlign, to_container
 from prompt_toolkit.layout.controls import BufferControl, FormattedTextControl
 from prompt_toolkit.layout.dimension import Dimension
 from prompt_toolkit.layout.dimension import Dimension as D
@@ -311,11 +311,11 @@ class LayoutManager(object):
 
     def _get_align(self):
         if self.pymux.status_justify == Justify.RIGHT:
-            return Align.RIGHT
+            return WindowAlign.RIGHT
         elif self.pymux.status_justify == Justify.CENTER:
-            return Align.CENTER
+            return WindowAlign.CENTER
         else:
-            return Align.LEFT
+            return WindowAlign.LEFT
 
     def _before_prompt_command_tokens(self):
         return [('class:commandline.prompt', '%s ' % (self.client_state.prompt_text, ))]
@@ -356,7 +356,7 @@ class LayoutManager(object):
                             height=1,
                             width=(lambda: D(max=self.pymux.status_right_length)),
                             dont_extend_width=True,
-                            align=Align.RIGHT,
+                            align=WindowAlign.RIGHT,
                             content=FormattedTextControl(self._get_status_right_tokens))
                     ], z_index=Z_INDEX.STATUS_BAR, style='class:statusbar'),
                     filter=Condition(lambda: self.pymux.enable_status),
