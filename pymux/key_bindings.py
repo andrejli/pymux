@@ -94,49 +94,6 @@ class PymuxKeyBindings(object):
         prompt_or_command_focus = has_focus(COMMAND) | has_focus(PROMPT)
         display_pane_numbers = Condition(lambda: pymux.display_pane_numbers)
         in_scroll_buffer_not_searching = InScrollBufferNotSearching(pymux)
-        pane_input_allowed = ~(prompt_or_command_focus | has_prefix |
-                               waits_for_confirmation | display_pane_numbers |
-                               InScrollBuffer(pymux))
-
-#        @kb.add(Keys.Any, filter=pane_input_allowed, invalidate_ui=False)
-#        def _(event):
-#            """
-#            When a pane has the focus, key bindings are redirected to the
-#            process running inside the pane.
-#            """
-#            # NOTE: we don't invalidate the UI, because for pymux itself,
-#            #       nothing in the output changes yet. It's the application in
-#            #       the pane that will probably echo back the typed characters.
-#            #       When we receive them, they are draw to the UI and it's
-#            #       invalidated.
-#            w = pymux.arrangement.get_active_window()
-#            pane = w.active_pane
-#
-#            if pane.clock_mode:
-#                # Leave clock mode on key press.
-#                pane.clock_mode = False
-#                pymux.invalidate()
-#            else:
-#                # Write input to pane. If 'synchronize_panes' is on, write
-#                # input to all panes in the current window.
-#                panes = w.panes if w.synchronize_panes else [pane]
-#                for p in panes:
-#                    p.process.write_key(event.key_sequence[0].key)
-#
-#        @kb.add(Keys.BracketedPaste, filter=pane_input_allowed, invalidate_ui=False)
-#        def _(event):
-#            """
-#            Pasting to the active pane. (Using bracketed paste.)
-#            """
-#            w = pymux.arrangement.get_active_window()
-#            pane = w.active_pane
-#
-#            if not pane.clock_mode:
-#                # Paste input to pane. If 'synchronize_panes' is on, paste
-#                # input to all panes in the current window.
-#                panes = w.panes if w.synchronize_panes else [pane]
-#                for p in panes:
-#                    p.process.write_input(event.data, paste=True)
 
         @kb.add(Keys.Any, filter=has_prefix)
         def _(event):
@@ -208,10 +165,22 @@ class PymuxKeyBindings(object):
 
             selection_state.type = types[(index + 1) % len(types)]
 
-        @kb.add(Keys.Any, filter=display_pane_numbers)
+        @kb.add(Keys.Any, eager=True, filter=display_pane_numbers)
         def _(event):
             " When the pane numbers are shown. Any key press should hide them. "
             pymux.display_pane_numbers = False
+
+        @Condition
+        def clock_displayed():
+            " "
+            pane = pymux.arrangement.get_active_pane()
+            return pane.clock_mode
+
+        @kb.add(Keys.Any, eager=True, filter=clock_displayed)
+        def _(event):
+            " When the clock is displayed. Any key press should hide it. "
+            pane = pymux.arrangement.get_active_pane()
+            pane.clock_mode = False
 
         return kb
 
