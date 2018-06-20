@@ -628,8 +628,7 @@ def list_keys(pymux, variables):
     result = '\n'.join(sorted(result))
 
     # Display help in pane.
-    pane = pymux.arrangement.get_active_pane()
-    pane.display_text(result, title='list-keys')
+    pymux.get_client_state().layout_manager.display_popup('list-keys', result)
 
 
 @cmd('list-panes')

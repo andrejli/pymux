@@ -38,9 +38,9 @@ import time
 import traceback
 import weakref
 
-__all__ = (
+__all__ = [
     'Pymux',
-)
+]
 
 
 class ClientState(object):
@@ -69,6 +69,9 @@ class ClientState(object):
         # When a "command-prompt" command is running.
         self.prompt_text = None
         self.prompt_command = None
+
+        # Popup.
+        self.display_popup = False
 
         # Input buffers.
         self.command_buffer = Buffer(
@@ -176,8 +179,6 @@ class ClientState(object):
             self.message = None
         app.key_processor.before_key_press += key_pressed
 
-#        app._is_running = True
-
         # The following code needs to run with the application active.
         # Especially, `create_window` needs to know what the current
         # application is, in order to focus the new pane.
@@ -194,6 +195,11 @@ class ClientState(object):
         """
         Focus the focused window from the pymux arrangement.
         """
+        # Pop-up displayed?
+        if self.display_popup:
+            self.app.layout.focus(self.layout_manager.popup_dialog)
+            return
+
         # Confirm.
         if self.confirm_text:
             return
@@ -212,17 +218,6 @@ class ClientState(object):
 
         pane = self.pymux.arrangement.get_active_pane()
         self.app.layout.focus(pane.terminal)
-
-        # Copy/search mode.
-
-#        if pane and pane.display_scroll_buffer:
-#            if False:  #  pane.is_searching:   # XXX TODO
-#                pass # Focus search buffer.
-#                #return 'search-%i' % pane.pane_id
-#            else:
-#                self.app.layout.focus(pane.terminal)
-#
-#                #return 'pane-%i' % pane.pane_id
 
 
 class Pymux(object):

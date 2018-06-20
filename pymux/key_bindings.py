@@ -165,6 +165,15 @@ class PymuxKeyBindings(object):
 
             selection_state.type = types[(index + 1) % len(types)]
 
+        @Condition
+        def popup_displayed():
+            return self.pymux.get_client_state().display_popup
+
+        @kb.add('q', filter=popup_displayed, eager=True)
+        def _(event):
+            " Quit pop-up dialog. "
+            self.pymux.get_client_state().display_popup = False
+
         @kb.add(Keys.Any, eager=True, filter=display_pane_numbers)
         def _(event):
             " When the pane numbers are shown. Any key press should hide them. "

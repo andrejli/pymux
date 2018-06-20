@@ -6,7 +6,7 @@ from __future__ import unicode_literals
 
 from prompt_toolkit.application.current import get_app
 from prompt_toolkit.filters import Condition, has_focus
-from prompt_toolkit.formatted_text import FormattedText
+from prompt_toolkit.formatted_text import FormattedText, HTML
 from prompt_toolkit.layout.containers import VSplit, HSplit, Window, FloatContainer, Float, ConditionalContainer, Container, WindowAlign, to_container
 from prompt_toolkit.layout.controls import BufferControl, FormattedTextControl
 from prompt_toolkit.layout.dimension import Dimension
@@ -16,7 +16,7 @@ from prompt_toolkit.layout.menus import CompletionsMenu
 from prompt_toolkit.layout.processors import BeforeInput, ShowArg, AppendAutoSuggestion, Processor, Transformation, HighlightSelectionProcessor
 from prompt_toolkit.layout.screen import Char
 from prompt_toolkit.mouse_events import MouseEventType
-from prompt_toolkit.widgets.toolbars import FormattedTextToolbar
+from prompt_toolkit.widgets import FormattedTextToolbar, TextArea, Dialog, SearchToolbar
 
 from six.moves import range
 from functools import partial
@@ -24,6 +24,7 @@ from functools import partial
 import pymux.arrangement as arrangement
 import datetime
 import weakref
+import six
 
 from .filters import WaitsForConfirmation
 from .format import format_pymux_string
@@ -48,6 +49,8 @@ class Z_INDEX:
     STATUS_BAR = 5
     COMMAND_LINE = 6
     MESSAGE_TOOLBAR = 7
+    WINDOW_TITLE_BAR = 8
+    POPUP = 9
 
 
 class Background(Container):
@@ -249,10 +252,7 @@ class MessageToolbar(FormattedTextToolbar):
         def is_visible():
             return bool(get_message())
 
-        super(MessageToolbar, self).__init__(get_tokens,
-#                filter=f,
-#                has_focus=f
-                )
+        super(MessageToolbar, self).__init__(get_tokens)
 
 
 class LayoutManager(object):
@@ -262,6 +262,24 @@ class LayoutManager(object):
     def __init__(self, pymux, client_state):
         self.pymux = pymux
         self.client_state = client_state
+
+        # Popup dialog for displaying keys, etc...
+        search_textarea = SearchToolbar()
+        self._popup_textarea = TextArea(scrollbar=True, read_only=True, search_field=search_textarea)
+        self.popup_dialog = Dialog(
+            title='Keys',
+            body=HSplit([
+                Window(FormattedTextControl(text=''), height=1),  # 1 line margin.
+                self._popup_textarea,
+                search_textarea,
+                Window(
+                    FormattedTextControl(
+                        text=HTML('Press [<b>q</b>] to quit or [<b>/</b>] for searching.')),
+                    align=WindowAlign.CENTER,
+                    height=1)
+                ])
+            )
+
         self.layout = self._create_layout()
 
         # Keep track of render information.
@@ -273,6 +291,18 @@ class LayoutManager(object):
         during rendering).
         """
         self.pane_write_positions = {}
+
+    def display_popup(self, title, content):
+        """
+        Display a pop-up dialog.
+        """
+        assert isinstance(title, six.text_type)
+        assert isinstance(content, six.text_type)
+
+        self.popup_dialog.title = title
+        self._popup_textarea.text = content
+        self.client_state.display_popup = True
+        get_app().layout.focus(self._popup_textarea)
 
     def _create_select_window_handler(self, window):
         " Return a mouse handler that selects the given window when clicking. "
@@ -416,6 +446,15 @@ class LayoutManager(object):
                         filter=has_focus(self.client_state.prompt_buffer),
                     ),
                 ])),
+                # Keys pop-up.
+                Float(
+                    content=ConditionalContainer(
+                        content=self.popup_dialog,
+                        filter=Condition(lambda: self.client_state.display_popup),
+                    ),
+                    left=3, right=3, top=5, bottom=5,
+                    z_index=Z_INDEX.POPUP,
+                ),
                 Float(xcursor=True, ycursor=True, content=CompletionsMenu(max_height=12)),
             ]
         )
@@ -749,7 +788,7 @@ def _create_container_for_process(pymux, window, arrangement_pane, zoom=False):
                                     style='class:paneindex')
                             ], style='class:titlebar'),
                         filter=Condition(lambda: pymux.enable_pane_status)),
-                    left=0, right=0, top=-1, height=1, z_index=100),
+                    left=0, right=0, top=-1, height=1, z_index=Z_INDEX.WINDOW_TITLE_BAR),
 
                 # The clock.
                 Float(
