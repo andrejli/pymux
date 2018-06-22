@@ -509,7 +509,7 @@ class Pymux(object):
 
         # Send kill signal.
         if not pane.process.is_terminated:
-            pane.process.send_signal(signal.SIGKILL)
+            pane.process.kill()
 
         # Remove from layout.
         self.arrangement.remove_pane(pane)
