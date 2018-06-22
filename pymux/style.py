@@ -55,6 +55,8 @@ ui_style = Style.from_dict({
     'confirmationtoolbar question': '',
     'confirmationtoolbar yesno':    'bg:#440000',
 
+    'copy-mode-cursor-position':   'bg:ansiyellow ansiblack',
+
 #    'search-toolbar':                       'bg:#88ff44 #444444',
     'search-toolbar.prompt':                'bg:#88ff44 #444444',
     'search-toolbar.text':                  'bg:#88ff44 #000000',
@@ -63,4 +65,12 @@ ui_style = Style.from_dict({
 
     'search-match':                  '#000000 bg:#88aa88',
     'search-match.current':          '#000000 bg:#aaffaa underline',
+
+    # Pop-up dialog. Ignore built-in style.
+    'dialog':                        'noinherit',
+    'dialog.body':                   'noinherit',
+    'dialog frame':                  'noinherit',
+    'dialog.body text-area':         'noinherit',
+    'dialog.body text-area last-line': 'noinherit',
+
 }, priority=Priority.MOST_PRECISE)
